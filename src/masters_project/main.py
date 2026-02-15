@@ -1,3 +1,3 @@
-from .config import settings
+from masters_project.config import settings
 
 settings.setup_logging()
