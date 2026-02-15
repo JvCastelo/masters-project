@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     TARGET_LATITUDE: float
     TARGET_LONGITUDE: float
     RADIUS: int
+    STATION: str
+    DATA_TYPE: str
     LOG_LEVEL: str = "INFO"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")

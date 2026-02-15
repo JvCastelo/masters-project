@@ -49,4 +49,4 @@ for path in list_files_path:
 
 df_satellite = pd.concat(all_dfs, ignore_index=True)
 
-df_satellite.to_csv("data/satellite.csv", index=False)
+df_satellite.to_csv("data/goes/satellite.csv", index=False)
