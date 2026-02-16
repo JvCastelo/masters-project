@@ -53,14 +53,16 @@ class SondaClient:
             logger.error(f"HTTP {e.response.status_code} for URL: {url}")
             return None
 
-    def download_file_by_year(self, year: int, output_dir: str = "data/sonda") -> Path:
+    def download_file_by_year(
+        self, year: int, output_dir: str = "data/temp/sonda"
+    ) -> Path:
         url = f"https://sonda.ccst.inpe.br/dados/{self.data_type}/{self.station_code}/{year}/{self.station_code}_{year}_SD.zip"
 
         path = Path(output_dir) / f"{self.station_name}_{year}.zip"
         return self._download(url, path)
 
     def download_file_by_year_month(
-        self, year: int, month: int, output_dir: str = "data/sonda"
+        self, year: int, month: int, output_dir: str = "data/temp/sonda"
     ) -> Path:
         url = f"https://sonda.ccst.inpe.br/dados/{self.data_type}/{self.station_code}/{year}/{self.station_code}_{year}_{month:02d}_SD.zip"
 

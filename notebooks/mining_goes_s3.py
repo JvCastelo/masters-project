@@ -1,9 +1,11 @@
 import logging
+from pathlib import Path
 
 import pandas as pd
 
 from masters_project.clients.goes_s3 import GoesS3Client
 from masters_project.config import settings
+from masters_project.loaders.csv import CSVExporter
 from masters_project.processors.goes import GoesProcessor
 
 settings.setup_logging()
@@ -14,7 +16,7 @@ client = GoesS3Client(
     product_name=settings.PRODUCT_NAME, bucket_name=settings.BUCKET_NAME
 )
 
-list_files_path = client.get_files_path_by_day(year=2019)
+list_files_path = client.get_files_path_by_day(year=2024)
 list_files_path = list_files_path[:3]
 print(list_files_path)
 
@@ -47,6 +49,8 @@ for path in list_files_path:
         except Exception as e:
             logger.error(f"Failed to process {path}: {e}")
 
-df_satellite = pd.concat(all_dfs, ignore_index=True)
+df_goes = pd.concat(all_dfs, ignore_index=True)
 
-df_satellite.to_csv("data/goes/satellite.csv", index=False)
+base_path = Path("data") / "temp" / "goes" / "goes.csv"
+
+CSVExporter().export(df_goes, base_path)

@@ -31,13 +31,30 @@ class SondaProcessor:
 
     @staticmethod
     def create_dataframe(extraction_dir: Path) -> pd.DataFrame:
-        path_dat_file = next(extraction_dir.glob("*.dat"))
+
+        path_dat_file = next(extraction_dir.glob("*.dat"), None)
+
         if not path_dat_file:
             logger.error(f"No DAT file found in {extraction_dir}")
             return pd.DataFrame()
-        df = pd.read_csv(path_dat_file, sep=",", skiprows=1)
-        logger.info(f"Loaded DataFrame from .dat: {path_dat_file.name}")
-        return df
+
+        try:
+            df = pd.read_csv(
+                path_dat_file, sep=",", skiprows=1, parse_dates=["timestamp"]
+            )
+
+            logger.info(f"Loaded DataFrame from .dat: {path_dat_file.name}")
+
+            path_dat_file.unlink()
+
+            logger.debug(f"Deleted source file: {path_dat_file.name}")
+
+            return df
+
+        except Exception as e:
+            logger.error(f"Failed to read or delete {path_dat_file.name}: {e}")
+
+            return pd.DataFrame()
 
     def format_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         df = df.iloc[1:].reset_index(drop=True)
@@ -55,5 +72,9 @@ class SondaProcessor:
             ],
             inplace=True,
         )
-        df["timestamp"] = pd.to_datetime(df["timestamp"]).dt.tz_localize("UTC")
-        return df
+        df["glo_avg"] = pd.to_numeric(df["glo_avg"], errors="coerce")
+        df["timestamp"] = df["timestamp"].dt.ceil("5min").dt.tz_localize("UTC")
+
+        df_formated = df.set_index("timestamp").resample("15min").mean().reset_index()
+
+        return df_formated

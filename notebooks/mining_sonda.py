@@ -1,5 +1,8 @@
+from pathlib import Path
+
 from masters_project.clients.sonda import SondaClient
 from masters_project.config import settings
+from masters_project.loaders.csv import CSVExporter
 from masters_project.processors.sonda import SondaProcessor
 
 settings.setup_logging()
@@ -14,4 +17,6 @@ df_sonda = SondaProcessor.create_dataframe(extraction_dir).pipe(
     SondaProcessor.format_dataframe
 )
 
-print(df_sonda)
+base_path = Path("data") / "temp" / "sonda" / "sonda.csv"
+
+CSVExporter().export(df_sonda, base_path)

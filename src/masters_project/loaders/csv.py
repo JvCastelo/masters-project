@@ -8,9 +8,9 @@ from masters_project.loaders.base import DataExporter
 logger = logging.getLogger(__name__)
 
 
-class ParquetExporter(DataExporter):
+class CSVExporter(DataExporter):
     def export(self, df: pd.DataFrame, destination: Path) -> None:
 
-        df.to_parquet(destination, engine="pyarrow")
+        df.to_csv(destination, index=False)
 
-        logger.info(f"Exported to Parquet: {destination}")
+        logger.info(f"Exported to CSV: {destination}")
