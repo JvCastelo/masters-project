@@ -4,11 +4,15 @@ from pathlib import Path
 
 import pandas as pd
 
+from masters_project.utils import measure_memory, time_track
+
 logger = logging.getLogger(__name__)
 
 
 class SondaProcessor:
     @staticmethod
+    @measure_memory
+    @time_track
     def extract_zip(zip_path: Path, delete_zip: bool = True) -> Path:
         extraction_dir = zip_path.parent
         extraction_dir.mkdir(parents=True, exist_ok=True)
@@ -30,6 +34,8 @@ class SondaProcessor:
             raise
 
     @staticmethod
+    @measure_memory
+    @time_track
     def create_dataframe(extraction_dir: Path) -> pd.DataFrame:
 
         path_dat_file = next(extraction_dir.glob("*.dat"), None)
@@ -56,6 +62,9 @@ class SondaProcessor:
 
             return pd.DataFrame()
 
+    @staticmethod
+    @measure_memory
+    @time_track
     def format_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         df = df.iloc[1:].reset_index(drop=True)
         df.drop(
@@ -73,8 +82,6 @@ class SondaProcessor:
             inplace=True,
         )
         df["glo_avg"] = pd.to_numeric(df["glo_avg"], errors="coerce")
-        df["timestamp"] = df["timestamp"].dt.ceil("5min").dt.tz_localize("UTC")
+        df["timestamp"] = df["timestamp"].dt.tz_localize("UTC")
 
-        df_formated = df.set_index("timestamp").resample("15min").mean().reset_index()
-
-        return df_formated
+        return df

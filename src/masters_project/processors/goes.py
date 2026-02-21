@@ -4,16 +4,22 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
+from masters_project.utils import measure_memory, time_track
+
 logger = logging.getLogger(__name__)
 
 
 class GoesProcessor:
     @staticmethod
+    @measure_memory
+    @time_track
     def open_as_dataset(file_obj) -> xr.Dataset:
         logger.info("Opening file-like object as NetCDF dataset.")
         return xr.open_dataset(file_obj, engine="h5netcdf")
 
     @staticmethod
+    @measure_memory
+    @time_track
     def add_metadata(ds: xr.Dataset) -> xr.Dataset:
         logger.info("Extracting metadata from dataset attributes.")
         file_name = ds.attrs.get("dataset_name", "")
@@ -26,7 +32,7 @@ class GoesProcessor:
             logger.exception(f"Error catching name: {e}, defined as {channel}")
 
         time_str = ds.attrs.get("time_coverage_start")
-        timestamp = pd.to_datetime(time_str).ceil("15min").tz_convert("UTC")
+        timestamp = pd.to_datetime(time_str).round("10min").tz_convert("UTC")
         logger.debug(f"Computed timestamp: {timestamp}")
 
         ds.attrs["channel"] = channel
@@ -35,6 +41,8 @@ class GoesProcessor:
         return ds
 
     @staticmethod
+    @measure_memory
+    @time_track
     def add_lat_lon_dimensions(ds: xr.Dataset) -> xr.Dataset:
         """
         The math for this function was taken from:
@@ -82,6 +90,8 @@ class GoesProcessor:
         return ds
 
     @staticmethod
+    @measure_memory
+    @time_track
     def get_nearest_xy_from_latlon(ds, lat_target, lon_target) -> xr.Dataset:
         logger.info(
             f"Searching for nearest pixel to Lat: {lat_target}, Lon: {lon_target}"
@@ -104,6 +114,8 @@ class GoesProcessor:
         return ds
 
     @staticmethod
+    @measure_memory
+    @time_track
     def extract_window_to_df(
         ds: xr.Dataset, variable: str, radius: int
     ) -> pd.DataFrame:
