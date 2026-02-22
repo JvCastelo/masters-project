@@ -1,4 +1,3 @@
-import io
 import logging
 
 import numpy as np
@@ -15,10 +14,8 @@ class GoesProcessor:
     @measure_memory
     @time_track
     def open_as_dataset(file_obj) -> xr.Dataset:
-        files_bytes = file_obj.read()
-        virtual_file = io.BytesIO(files_bytes)
         logger.info("Opening file-like object as NetCDF dataset.")
-        return xr.open_dataset(virtual_file, engine="h5netcdf")
+        return xr.open_dataset(file_obj, engine="h5netcdf", cache=False)
 
     @staticmethod
     @measure_memory
@@ -97,7 +94,6 @@ class GoesProcessor:
         i_center = ds.attrs.get("target_pixel_i")
         j_center = ds.attrs.get("target_pixel_j")
         channel = ds.attrs.get("channel")
-        timestamp = ds.attrs.get("timestamp")
 
         if i_center is None or j_center is None:
             logger.error(
@@ -121,7 +117,8 @@ class GoesProcessor:
             cols.append(f"radius={radius}_{channel}_{row}{col}")
 
         df = pd.DataFrame([window_flat], columns=cols)
-        df["timestamp"] = timestamp
+        df["timestamp"] = ds.attrs.get("timestamp")
+        df = df.sort_values(by="timestamp").reset_index(drop=True)
 
         logger.info(f"Successfully created DataFrame with {len(cols)} window columns.")
         return df

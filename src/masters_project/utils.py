@@ -1,6 +1,7 @@
 import logging
 import time
 import tracemalloc
+from datetime import date, datetime
 from functools import wraps
 
 from masters_project.config import settings
@@ -46,3 +47,45 @@ def measure_memory(func):
         return result
 
     return wrapper
+
+
+def get_target_years(start_date: str | date, end_date: str | date) -> list[int]:
+    """
+    Converts start and end dates into a unique list of years.
+    Example: '2023-11-01' to '2024-02-01' -> [2023, 2024]
+    """
+    if isinstance(start_date, str):
+        start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
+    if isinstance(end_date, str):
+        end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
+
+    return list(range(start_date.year, end_date.year + 1))
+
+
+def get_target_year_months(
+    start_date: str | date, end_date: str | date
+) -> list[tuple[int, int]]:
+    """
+    Converts start and end dates into a sequential list of tuples.
+    Example: '2023-11-15' to '2024-02-10' -> [(2023, 11), (2023, 12), (2024, 1), (2024, 2)]
+    """
+    if isinstance(start_date, str):
+        start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
+    if isinstance(end_date, str):
+        end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
+
+    year_months = []
+    current_year = start_date.year
+    current_month = start_date.month
+
+    while (current_year < end_date.year) or (
+        current_year == end_date.year and current_month <= end_date.month
+    ):
+        year_months.append((current_year, current_month))
+
+        current_month += 1
+        if current_month > 12:
+            current_month = 1
+            current_year += 1
+
+    return year_months

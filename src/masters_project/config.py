@@ -24,6 +24,8 @@ class GoesConfig:
     # TARGET_LATITUDE =
     # TARGET_LONGITUDE =
 
+    MAX_WORKERS = 10
+
 
 class SondaConfig:
     DATA_TYPE = (
@@ -42,7 +44,9 @@ class SondaConfig:
 
 
 class GeneralConfig:
-    YEAR = 2024
+    START_DATE = "2024-01-01"
+    END_DATE = "2024-12-31"
+
     BASE_PATH_FILE_LOG = Path("data") / "logs"
     BASE_PATH_FILE_INPUT_MODEL = Path("data") / "input_model"
     BASE_PATH_FILE_OUPUT_MODEL = Path("data") / "output_model"
