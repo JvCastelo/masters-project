@@ -1,3 +1,4 @@
+import io
 import logging
 
 import numpy as np
@@ -14,8 +15,10 @@ class GoesProcessor:
     @measure_memory
     @time_track
     def open_as_dataset(file_obj) -> xr.Dataset:
+        files_bytes = file_obj.read()
+        virtual_file = io.BytesIO(files_bytes)
         logger.info("Opening file-like object as NetCDF dataset.")
-        return xr.open_dataset(file_obj, engine="h5netcdf")
+        return xr.open_dataset(virtual_file, engine="h5netcdf")
 
     @staticmethod
     @measure_memory
@@ -43,75 +46,45 @@ class GoesProcessor:
     @staticmethod
     @measure_memory
     @time_track
-    def add_lat_lon_dimensions(ds: xr.Dataset) -> xr.Dataset:
+    def get_target_indices(ds: xr.Dataset, lat: float, lon: float) -> tuple[int, int]:
         """
-        The math for this function was taken from:
-        https://makersportal.com/blog/2018/11/25/goes-r-satellite-latitude-and-longitude-grid-projection-algorithm
+        Inverse GOES Imager Projection: Converts a target Lat/Lon into dataset i, j indices.
         """
-        logger.info("Starting Latitude/Longitude grid projection algorithm.")
+        logger.info(f"Calculating inverse projection for Lat: {lat}, Lon: {lon}")
 
-        x = ds.x
-        y = ds.y
-        goes_imager_projection = ds.goes_imager_projection
+        proj = ds.goes_imager_projection
+        r_eq = proj.attrs["semi_major_axis"]
+        r_pol = proj.attrs["semi_minor_axis"]
+        h_sat = proj.attrs["perspective_point_height"]
+        l_0 = proj.attrs["longitude_of_projection_origin"] * (np.pi / 180.0)
 
-        logger.debug(f"Meshgrid shape: {len(y)}x{len(x)}")
-        x, y = np.meshgrid(x, y)
-
-        r_eq = goes_imager_projection.attrs["semi_major_axis"]
-        r_pol = goes_imager_projection.attrs["semi_minor_axis"]
-        l_0 = goes_imager_projection.attrs["longitude_of_projection_origin"] * (
-            np.pi / 180
-        )
-        h_sat = goes_imager_projection.attrs["perspective_point_height"]
         H = r_eq + h_sat
 
-        a = np.sin(x) ** 2 + (
-            np.cos(x) ** 2 * (np.cos(y) ** 2 + (r_eq**2 / r_pol**2) * np.sin(y) ** 2)
-        )
-        b = -2 * H * np.cos(x) * np.cos(y)
-        c = H**2 - r_eq**2
+        lat_rad = lat * (np.pi / 180.0)
+        lon_rad = lon * (np.pi / 180.0)
 
-        r_s = (-b - np.sqrt(b**2 - 4 * a * c)) / (2 * a)
+        # NOAA PUG Inverse Projection Math
+        e_sq = 1.0 - (r_pol**2 / r_eq**2)
+        phi_c = np.arctan((r_pol**2 / r_eq**2) * np.tan(lat_rad))
+        r_c = r_pol / np.sqrt(1.0 - e_sq * np.cos(phi_c) ** 2)
 
-        s_x = r_s * np.cos(x) * np.cos(y)
-        s_y = -r_s * np.sin(x)
-        s_z = r_s * np.cos(x) * np.sin(y)
+        s_x = H - r_c * np.cos(phi_c) * np.cos(lon_rad - l_0)
+        s_y = -r_c * np.cos(phi_c) * np.sin(lon_rad - l_0)
+        s_z = r_c * np.sin(phi_c)
 
-        lat = np.arctan(
-            (r_eq**2 / r_pol**2) * (s_z / np.sqrt((H - s_x) ** 2 + s_y**2))
-        ) * (180 / np.pi)
-        lon = (l_0 - np.arctan(s_y / (H - s_x))) * (180 / np.pi)
+        if H * (H - s_x) < (s_y**2 + (r_eq**2 / r_pol**2) * s_z**2):
+            raise ValueError(
+                f"Coordinate ({lat}, {lon}) is hidden behind the Earth from this satellite."
+            )
 
-        ds = ds.assign_coords({"lat": (["y", "x"], lat), "lon": (["y", "x"], lon)})
-        ds.lat.attrs["units"] = "degrees_north"
-        ds.lon.attrs["units"] = "degrees_east"
+        target_x = np.arcsin(-s_y / np.sqrt(s_x**2 + s_y**2 + s_z**2))
+        target_y = np.arctan(s_z / s_x)
 
-        logger.info("Lat/Lon dimensions successfully assigned to dataset.")
-        return ds
+        i = np.argmin(np.abs(ds.y.values - target_y))
+        j = np.argmin(np.abs(ds.x.values - target_x))
 
-    @staticmethod
-    @measure_memory
-    @time_track
-    def get_nearest_xy_from_latlon(ds, lat_target, lon_target) -> xr.Dataset:
-        logger.info(
-            f"Searching for nearest pixel to Lat: {lat_target}, Lon: {lon_target}"
-        )
-        lat = ds.lat.data
-        lon = ds.lon.data
-
-        valid_pixels = ~np.isnan(lat) & ~np.isnan(lon)
-
-        distance = np.full(lat.shape, np.inf)
-        distance[valid_pixels] = np.sqrt(
-            (lat[valid_pixels] - lat_target) ** 2
-            + (lon[valid_pixels] - lon_target) ** 2
-        )
-
-        i, j = np.unravel_index(np.argmin(distance), distance.shape)
-        ds.attrs["target_pixel_i"], ds.attrs["target_pixel_j"] = i, j
-
-        logger.info(f"Nearest pixel found at indices: i={i}, j={j}")
-        return ds
+        logger.info(f"Target found at indices: i={i}, j={j}")
+        return int(i), int(j)
 
     @staticmethod
     @measure_memory

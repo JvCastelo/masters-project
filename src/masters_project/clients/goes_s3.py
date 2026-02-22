@@ -4,7 +4,7 @@ from datetime import datetime
 
 import s3fs
 
-from masters_project.enums import GoesChannel
+from masters_project.enums import GoesChannelEnums
 from masters_project.utils import measure_memory, time_track
 
 logger = logging.getLogger(__name__)
@@ -29,7 +29,7 @@ class GoesS3Client:
     ) -> list[str]:
 
         if not channels:
-            channels = [channel_enum.value for channel_enum in GoesChannel]
+            channels = [channel_enum.value for channel_enum in GoesChannelEnums]
 
         paths = []
 

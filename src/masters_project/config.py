@@ -1,4 +1,5 @@
 import logging
+import sys
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -53,12 +54,19 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
     def setup_logging(self):
+
+        GeneralConfig.BASE_PATH_FILE_LOG.mkdir(parents=True, exist_ok=True)
+
+        log_file_path = Path(GeneralConfig.BASE_PATH_FILE_LOG) / "application.log"
+
         logging.basicConfig(
-            filename=f"{GeneralConfig.BASE_PATH_FILE_LOG}" / "application.log",
-            filemode="w",
             level=self.LOG_LEVEL,
             format="%(asctime)s :: %(levelname)-8s :: %(name)s :: %(message)s",
             force=True,
+            handlers=[
+                logging.FileHandler(log_file_path, mode="w"),
+                logging.StreamHandler(sys.stdout),
+            ],
         )
 
 

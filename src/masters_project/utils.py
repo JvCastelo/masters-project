@@ -19,7 +19,7 @@ def time_track(func):
 
         elapsed_time = time.perf_counter() - start_time
 
-        logger.debug(
+        logger.info(
             f"Function '{func.__name__}' took {elapsed_time:.4f} seconds to run."
         )
         return result
