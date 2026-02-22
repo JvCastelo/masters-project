@@ -4,32 +4,26 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from masters_project.utils import measure_memory, time_track
-
 logger = logging.getLogger(__name__)
 
 
 class GoesProcessor:
     @staticmethod
-    @measure_memory
-    @time_track
     def open_as_dataset(file_obj) -> xr.Dataset:
-        logger.info("Opening file-like object as NetCDF dataset.")
+        logger.debug("Opening file-like object as NetCDF dataset.")
         return xr.open_dataset(file_obj, engine="h5netcdf", cache=False)
 
     @staticmethod
-    @measure_memory
-    @time_track
     def add_metadata(ds: xr.Dataset) -> xr.Dataset:
-        logger.info("Extracting metadata from dataset attributes.")
+        logger.debug("Extracting metadata from dataset attributes.")
         file_name = ds.attrs.get("dataset_name", "")
 
         try:
             channel = file_name.split("_")[1].split("-")[-1][-3:]
             logger.debug(f"Detected channel: {channel}")
-        except Exception as e:
+        except Exception:
             channel = "UNK"
-            logger.exception(f"Error catching name: {e}, defined as {channel}")
+            logger.exception(f"Error catching channel name. Defaulting to {channel}")
 
         time_str = ds.attrs.get("time_coverage_start")
         timestamp = pd.to_datetime(time_str).round("10min").tz_convert("UTC")
@@ -41,8 +35,6 @@ class GoesProcessor:
         return ds
 
     @staticmethod
-    @measure_memory
-    @time_track
     def get_target_indices(ds: xr.Dataset, lat: float, lon: float) -> tuple[int, int]:
         """
         Inverse GOES Imager Projection: Converts a target Lat/Lon into dataset i, j indices.
@@ -80,16 +72,14 @@ class GoesProcessor:
         i = np.argmin(np.abs(ds.y.values - target_y))
         j = np.argmin(np.abs(ds.x.values - target_x))
 
-        logger.info(f"Target found at indices: i={i}, j={j}")
+        logger.debug(f"Target found at indices: i={i}, j={j}")
         return int(i), int(j)
 
     @staticmethod
-    @measure_memory
-    @time_track
     def extract_window_to_df(
         ds: xr.Dataset, variable: str, radius: int
     ) -> pd.DataFrame:
-        logger.info(f"Extracting {variable} window with radius {radius}.")
+        logger.debug(f"Extracting {variable} window with radius {radius}.")
 
         i_center = ds.attrs.get("target_pixel_i")
         j_center = ds.attrs.get("target_pixel_j")
@@ -118,7 +108,6 @@ class GoesProcessor:
 
         df = pd.DataFrame([window_flat], columns=cols)
         df["timestamp"] = ds.attrs.get("timestamp")
-        df = df.sort_values(by="timestamp").reset_index(drop=True)
 
-        logger.info(f"Successfully created DataFrame with {len(cols)} window columns.")
+        logger.debug(f"Successfully created DataFrame with {len(cols)} window columns.")
         return df

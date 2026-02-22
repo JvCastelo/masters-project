@@ -13,7 +13,7 @@ class GoesS3Client:
         self.product_name = product_name
         self.bucket_name = bucket_name
         self.fs = s3fs.S3FileSystem(anon=anon)
-        logger.info(f"GOES S3 Client created: {self}")
+        logger.debug(f"GOES S3 Client created: {self}")
 
     def __repr__(self):
         return (
@@ -61,13 +61,13 @@ class GoesS3Client:
 
             try:
                 found = self.fs.glob(pattern)
-                logger.info(
+                logger.debug(
                     f"Date: {current_date} (Julian: {day_of_year:03d}), "
                     f"Channel {channel} -> Found {len(found)} files."
                 )
                 all_paths.extend(found)
-            except Exception as e:
-                logger.error(f"Error on {current_date}, Channel {channel}: {e}")
+            except Exception:
+                logger.exception(f"Error on {current_date}, Channel {channel}")
 
         logger.info(f"Search complete. Total files collected: {len(all_paths)}")
 
@@ -77,9 +77,9 @@ class GoesS3Client:
     @time_track
     def get_file(self, file_path: str) -> s3fs.core.S3File:
         uri = f"s3://{file_path}"
-        logger.info(f"Opening S3 stream for: {uri}")
+        logger.debug(f"Opening S3 stream for: {uri}")
         try:
             return self.fs.open(uri)
-        except Exception as e:
-            logger.error(f"Failed to open S3 file: {uri}. Error: {e}")
+        except Exception:
+            logger.exception(f"Failed to open S3 file: {uri}")
             raise

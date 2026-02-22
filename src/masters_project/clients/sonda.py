@@ -16,7 +16,7 @@ class SondaClient:
             self.station_code = station_enum.value
             self.station_name = station_enum.name
         except KeyError:
-            valid_options = [s for s in SondaStationEnums]
+            valid_options = [s.name for s in SondaStationEnums]
             logger.error(
                 f"Failed to initialize SondaClient: Invalid station '{station}'."
             )
@@ -37,7 +37,7 @@ class SondaClient:
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        logger.info(f"Starting download from: {url}")
+        logger.debug(f"Starting download from: {url}")
 
         try:
             with httpx.stream("GET", url, timeout=self.timeout) as response:
@@ -45,17 +45,20 @@ class SondaClient:
                 with open(output_path, "wb") as file:
                     for data in response.iter_bytes():
                         file.write(data)
-            logger.info(f"Successfully saved file to: {output_path}")
+            logger.debug(f"Successfully saved file to: {output_path}")
             return output_path
+
         except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP Error {e.response.status_code} for URL: {url} - {e}")
-            return None
+            logger.warning(
+                f"HTTP {e.response.status_code} - File not found on server: {url}"
+            )
+            raise
         except httpx.RequestError as e:
-            logger.error(f"Network error while connecting to {url}: {e}")
-            return None
-        except Exception as e:
-            logger.exception(f"Unexpected error during download: {e}")
-            return None
+            logger.warning(f"Network connection dropped while connecting to {url}: {e}")
+            raise
+        except Exception:
+            logger.exception(f"Unexpected error during download from {url}")
+            raise
 
     @measure_memory
     @time_track
@@ -73,6 +76,6 @@ class SondaClient:
     ) -> Path:
         url = f"https://sonda.ccst.inpe.br/dados/{self.data_type}/{self.station_code}/{year}/{self.station_code}_{year}_{month:02d}_SD.zip"
 
-        path = Path(output_dir) / f"{self.station_name}_{year}.zip"
+        path = Path(output_dir) / f"{self.station_name}_{year}_{month:02d}.zip"
         logger.debug(f"Constructed monthly URL for {year}-{month:02d}: {url}")
         return self._download(url, path)

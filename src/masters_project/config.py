@@ -48,7 +48,7 @@ class GeneralConfig:
     END_DATE = "2024-12-31"
 
     BASE_PATH_FILE_LOG = Path("data") / "logs"
-    BASE_PATH_FILE_INPUT_MODEL = Path("data") / "input_model"
+    BASE_PATH_FILE_PROCESSED = Path("data") / "processed"
     BASE_PATH_FILE_OUPUT_MODEL = Path("data") / "output_model"
 
 
@@ -57,21 +57,38 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
-    def setup_logging(self):
+    def setup_logging(self, func_name):
 
         GeneralConfig.BASE_PATH_FILE_LOG.mkdir(parents=True, exist_ok=True)
 
-        log_file_path = Path(GeneralConfig.BASE_PATH_FILE_LOG) / "application.log"
-
-        logging.basicConfig(
-            level=self.LOG_LEVEL,
-            format="%(asctime)s :: %(levelname)-8s :: %(name)s :: %(message)s",
-            force=True,
-            handlers=[
-                logging.FileHandler(log_file_path, mode="w"),
-                logging.StreamHandler(sys.stdout),
-            ],
+        formatter = logging.Formatter(
+            "%(asctime)s :: %(levelname)-8s :: %(name)s :: %(message)s"
         )
+
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setLevel(self.LOG_LEVEL)
+        console_handler.setFormatter(formatter)
+
+        file_handler = logging.FileHandler(
+            Path(GeneralConfig.BASE_PATH_FILE_LOG) / f"{func_name}.log", mode="a"
+        )
+        file_handler.setLevel(logging.DEBUG)
+        file_handler.setFormatter(formatter)
+
+        root_logger = logging.getLogger()
+        root_logger.setLevel(logging.DEBUG)
+
+        if root_logger.hasHandlers():
+            root_logger.handlers.clear()
+
+        root_logger.addHandler(console_handler)
+        root_logger.addHandler(file_handler)
+
+        logging.getLogger("botocore").setLevel(logging.WARNING)
+        logging.getLogger("urllib3").setLevel(logging.WARNING)
+        logging.getLogger("s3fs").setLevel(logging.WARNING)
+        logging.getLogger("h5netcdf").setLevel(logging.WARNING)
+        logging.getLogger("fsspec").setLevel(logging.WARNING)
 
 
 settings = Settings()

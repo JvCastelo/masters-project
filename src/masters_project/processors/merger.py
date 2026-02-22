@@ -16,6 +16,16 @@ class DatasetMerger:
 
         logger.info("Starting exact GOES and SONDA dataset merge.")
 
+        try:
+            logger.debug("Casting timestamp columns to timezone-aware UTC datetimes...")
+            df_goes[time_col_goes] = pd.to_datetime(df_goes[time_col_goes], utc=True)
+            df_sonda[time_col_sonda] = pd.to_datetime(
+                df_sonda[time_col_sonda], utc=True
+            )
+        except Exception:
+            logger.exception("Failed to parse timestamps. Check your CSV date formats.")
+            raise
+
         df_merged = pd.merge(
             left=df_goes,
             right=df_sonda,
@@ -24,8 +34,17 @@ class DatasetMerger:
             how="inner",
         )
 
+        if df_merged.empty:
+            logger.error(
+                "CRITICAL: The inner merge resulted in 0 rows! "
+                "GOES and SONDA timestamps did not align. Check your timezone formatting."
+            )
+            raise ValueError(
+                "Merged dataset is empty. Pipeline halted to prevent data loss."
+            )
+
         logger.info(
-            f"Merge complete. Resulting model-ready dataset has {len(df_merged)} rows. "
+            f"Merge successful. Final shape: {df_merged.shape[0]} rows, {df_merged.shape[1]} columns. "
             f"(Dropped {len(df_goes) - len(df_merged)} unmatched GOES scans)."
         )
 
