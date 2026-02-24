@@ -14,4 +14,6 @@ wheels/
 data/
 *.csv
 *.parquet
-*.json
+
+# IDE
+.vscode

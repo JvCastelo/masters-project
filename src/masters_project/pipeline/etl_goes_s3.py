@@ -7,10 +7,10 @@ import pandas as pd
 from tqdm import tqdm
 
 from masters_project.clients.goes_s3 import GoesS3Client
-from masters_project.config import GeneralConfig, GoesConfig, SondaConfig, settings
 from masters_project.enums import GoesChannelEnums
 from masters_project.loaders.csv import CSVExporter
 from masters_project.processors.goes import GoesProcessor
+from masters_project.settings import settings
 
 settings.setup_logging("goes_etl")
 logger = logging.getLogger(__name__)
@@ -18,7 +18,8 @@ logger = logging.getLogger(__name__)
 hdf5_lock = Lock()
 
 client = GoesS3Client(
-    product_name=GoesConfig.PRODUCT_NAME, bucket_name=GoesConfig.BUCKET_NAME
+    product_name=settings.general.goes_product_name,
+    bucket_name=settings.general.goes_bucket_name,
 )
 channels = [GoesChannelEnums.C01.value]  ## Only one channel
 # channels = [channel.value for channel in GoesChannelEnums] ## All channels
@@ -39,7 +40,9 @@ def process_single_file(path: str, target_i: int, target_j: int) -> pd.DataFrame
                 ds.attrs["target_pixel_j"] = target_j
 
                 return GoesProcessor.extract_window_to_df(
-                    ds, variable=GoesConfig.GOES_VARIABLE, radius=GoesConfig.RADIUS
+                    ds,
+                    variable=settings.general.goes_variable,
+                    radius=settings.general.pixel_radius,
                 )
     except Exception:
         logger.exception(f"Failed to process {path}")
@@ -51,8 +54,8 @@ def main():
         logger.info(f"--- Starting processing for channel {channel} ---")
 
         list_files_path = client.get_files_path(
-            start_date=GeneralConfig.START_DATE,
-            # end_date=GeneralConfig.END_DATE,
+            start_date=settings.general.start_date,
+            # end_date=settings.general.end_date,
             channel=channel,
         )
 
@@ -74,13 +77,15 @@ def main():
                 ds = ds.pipe(GoesProcessor.add_metadata)
 
                 target_index_i, target_index_j = GoesProcessor.get_target_indices(
-                    ds, lat=GoesConfig.TARGET_LATITUDE, lon=GoesConfig.TARGET_LONGITUDE
+                    ds, lat=settings.station.latitude, lon=settings.station.longitude
                 )
                 ds.attrs["target_pixel_i"] = target_index_i
                 ds.attrs["target_pixel_j"] = target_index_j
 
                 first_df = GoesProcessor.extract_window_to_df(
-                    ds, variable=GoesConfig.GOES_VARIABLE, radius=GoesConfig.RADIUS
+                    ds,
+                    variable=settings.general.goes_variable,
+                    radius=settings.general.pixel_radius,
                 )
 
                 all_dfs.append(first_df)
@@ -94,7 +99,7 @@ def main():
             f"Target locked at i={target_index_i}, j={target_index_j}. Commencing threaded downloads."
         )
 
-        with ThreadPoolExecutor(max_workers=GoesConfig.MAX_WORKERS) as executor:
+        with ThreadPoolExecutor(max_workers=settings.general.max_workers) as executor:
             future_to_path = {
                 executor.submit(
                     process_single_file, path, target_index_i, target_index_j
@@ -118,8 +123,9 @@ def main():
             df_goes = df_goes.sort_values(by="timestamp").reset_index(drop=True)
 
             base_path = (
-                GoesConfig.BASE_PATH_FILE
-                / f"goes_{channel}_st_{GeneralConfig.START_DATE}_et_{GeneralConfig.END_DATE}_{SondaConfig.STATION}.csv"
+                settings.RAW_PATH
+                / "goes"
+                / f"goes_{channel}_st_{settings.general.start_date}_et_{settings.general.end_date}_{settings.station.name}.csv"
             )
 
             CSVExporter().export(df_goes, base_path)

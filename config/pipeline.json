@@ -1,0 +1,26 @@
+{
+  "general": {
+    "start_date": "2024-01-01",
+    "end_date": "2024-12-31",
+    "pixel_radius": 1,
+    "sonda_data_type": "solarimetricos",
+    "goes_product_name": "ABI-L1b-RadF",
+    "goes_bucket_name": "noaa-goes16",
+    "goes_variable": "Rad",
+    "max_workes": 10,
+    "log_level": "INFO"
+  },
+  "stations": [
+    {
+      "name": "PETROLINA",
+      "latitude": -9.069,
+      "longitude": -40.320
+    },
+    {
+      "name": "FLORIANOPOLIS",
+      "latitude": -27.604,
+      "longitude": -48.518
+    }
+  ],
+  "active_station": "PETROLINA"
+}

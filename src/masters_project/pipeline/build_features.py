@@ -2,10 +2,10 @@ import logging
 
 import pandas as pd
 
-from masters_project.config import GeneralConfig, GoesConfig, SondaConfig, settings
 from masters_project.enums import GoesChannelEnums
 from masters_project.loaders.csv import CSVExporter
 from masters_project.processors.merger import DatasetMerger
+from masters_project.settings import settings
 
 settings.setup_logging("building_features")
 logger = logging.getLogger(__name__)
@@ -18,8 +18,9 @@ def build_final_dataset():
     for channel in GoesChannelEnums:
         channel_val = channel.value
         goes_path = (
-            GoesConfig.BASE_PATH_FILE
-            / f"goes_{channel_val}_st_{GeneralConfig.START_DATE}_et_{GeneralConfig.END_DATE}_{SondaConfig.STATION}.csv"
+            settings.RAW_PATH
+            / "goes"
+            / f"goes_{channel_val}_st_{settings.general.start_date}_et_{settings.general.end_date}_{settings.station.name}.csv"
         )
 
         if goes_path.exists():
@@ -48,8 +49,9 @@ def build_final_dataset():
         return
 
     sonda_path = (
-        SondaConfig.BASE_PATH_FILE
-        / f"sonda_{SondaConfig.DATA_TYPE}_st_{GeneralConfig.START_DATE}_et_{GeneralConfig.END_DATE}_{SondaConfig.STATION}.csv"
+        settings.RAW_PATH
+        / "sonda"
+        / f"sonda_{settings.general.sonda_data_type}_st_{settings.general.start_date}_et_{settings.general.end_date}_{settings.station.name}.csv"
     )
 
     if not sonda_path.exists():
@@ -78,8 +80,8 @@ def build_final_dataset():
         )
 
     output_path = (
-        GeneralConfig.BASE_PATH_FILE_PROCESSED
-        / f"final_features_st_{GeneralConfig.START_DATE}_et_{GeneralConfig.END_DATE}_{SondaConfig.STATION}.csv"
+        settings.PROCESSED_PATH
+        / f"final_features_st_{settings.general.start_date}_et_{settings.general.end_date}_{settings.station.name}.csv"
     )
 
     CSVExporter().export(df_final, output_path)
