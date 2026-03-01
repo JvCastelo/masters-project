@@ -7,7 +7,7 @@
     "goes_product_name": "ABI-L1b-RadF",
     "goes_bucket_name": "noaa-goes16",
     "goes_variable": "Rad",
-    "max_workes": 10,
+    "max_workers": 20,
     "log_level": "INFO"
   },
   "stations": [
