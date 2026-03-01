@@ -6,6 +6,8 @@ logger = logging.getLogger(__name__)
 
 
 class DatasetMerger:
+    """Merge GOES and SONDA DataFrames on timestamp columns (inner join, timezone-aware)."""
+
     @staticmethod
     def merge_goes_sonda(
         df_goes: pd.DataFrame,
@@ -13,7 +15,21 @@ class DatasetMerger:
         time_col_goes: str = "timestamp",
         time_col_sonda: str = "timestamp",
     ) -> pd.DataFrame:
+        """Inner-join GOES and SONDA on timestamp; ensure UTC datetimes.
 
+        Args:
+            df_goes: GOES satellite feature DataFrame.
+            df_sonda: SONDA ground measurement DataFrame.
+            time_col_goes: Name of the timestamp column in df_goes. Defaults to "timestamp".
+            time_col_sonda: Name of the timestamp column in df_sonda. Defaults to "timestamp".
+
+        Returns:
+            Merged DataFrame with rows only where timestamps match.
+
+        Raises:
+            Exception: If timestamp parsing fails (re-raised after logging).
+            ValueError: If the inner merge produces zero rows.
+        """
         logger.info("Starting exact GOES and SONDA dataset merge.")
 
         try:

@@ -8,13 +8,31 @@ logger = logging.getLogger(__name__)
 
 
 class GoesProcessor:
+    """Process GOES NetCDF: open as xarray, add channel/timestamp metadata, project lat/lon to indices, extract pixel windows."""
+
     @staticmethod
     def open_as_dataset(file_obj) -> xr.Dataset:
+        """Open a file-like object as an xarray Dataset using the h5netcdf engine.
+
+        Args:
+            file_obj: File-like object (e.g. BytesIO) containing NetCDF bytes.
+
+        Returns:
+            xarray Dataset for the GOES NetCDF.
+        """
         logger.debug("Opening file-like object as NetCDF dataset.")
         return xr.open_dataset(file_obj, engine="h5netcdf", cache=False)
 
     @staticmethod
     def add_metadata(ds: xr.Dataset) -> xr.Dataset:
+        """Parse channel and time from dataset attributes and attach to ds.attrs.
+
+        Args:
+            ds: GOES xarray Dataset with dataset_name and time_coverage_start.
+
+        Returns:
+            The same Dataset with attrs['channel'] and attrs['timestamp'] set.
+        """
         logger.debug("Extracting metadata from dataset attributes.")
         file_name = ds.attrs.get("dataset_name", "")
 
@@ -36,8 +54,18 @@ class GoesProcessor:
 
     @staticmethod
     def get_target_indices(ds: xr.Dataset, lat: float, lon: float) -> tuple[int, int]:
-        """
-        Inverse GOES Imager Projection: Converts a target Lat/Lon into dataset i, j indices.
+        """Compute dataset (i, j) indices for a given latitude/longitude using GOES imager projection.
+
+        Args:
+            ds: GOES xarray Dataset with goes_imager_projection and x, y coordinates.
+            lat: Target latitude in degrees.
+            lon: Target longitude in degrees.
+
+        Returns:
+            (i, j) indices into the dataset grid (y, x) for the nearest pixel.
+
+        Raises:
+            ValueError: If (lat, lon) is behind the Earth from the satellite view.
         """
         logger.info(f"Calculating inverse projection for Lat: {lat}, Lon: {lon}")
 
@@ -79,6 +107,21 @@ class GoesProcessor:
     def extract_window_to_df(
         ds: xr.Dataset, variable: str, radius: int
     ) -> pd.DataFrame:
+        """Extract a (2*radius+1)^2 window around the target pixel and flatten to a one-row DataFrame.
+
+        Expects ds.attrs to contain target_pixel_i, target_pixel_j, and channel.
+
+        Args:
+            ds: GOES Dataset with the variable and target indices in attrs.
+            variable: Name of the data variable to extract (e.g. 'Rad').
+            radius: Half-width of the square window in pixels (window size = 2*radius+1).
+
+        Returns:
+            DataFrame with one row: flattened window columns (radius={r}_{channel}_{row}{col}) and timestamp.
+
+        Raises:
+            ValueError: If target_pixel_i or target_pixel_j are missing from ds.attrs.
+        """
         logger.debug(f"Extracting {variable} window with radius {radius}.")
 
         i_center = ds.attrs.get("target_pixel_i")

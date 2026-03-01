@@ -2,6 +2,8 @@ from enum import StrEnum
 
 
 class SondaStationEnums(StrEnum):
+    """SONDA network station identifiers: enum name (location) maps to station code used in URLs/APIs."""
+
     BRASILIA = "BRB"
     CACHOEIRA_PAULISTA = "CPA"
     CAICO = "CAI"
@@ -26,6 +28,8 @@ class SondaStationEnums(StrEnum):
 
 
 class GoesChannelEnums(StrEnum):
+    """GOES-R ABI channel identifiers (C01–C16) for band selection in file discovery and processing."""
+
     C01 = "C01"
     C02 = "C02"
     C03 = "C03"

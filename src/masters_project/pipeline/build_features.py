@@ -11,8 +11,12 @@ settings.setup_logging("building_features")
 logger = logging.getLogger(__name__)
 
 
-def build_final_dataset():
+def build_final_dataset() -> None:
+    """Load GOES CSVs (all channels), merge with SONDA CSV, align by timestamp, drop NaNs, export final features CSV.
 
+    Reads paths from settings; merges GOES channels on timestamp, then inner-joins with SONDA.
+    Writes the result to the processed path. Exits early if GOES or SONDA data is missing.
+    """
     df_goes_combined = None
 
     for channel in GoesChannelEnums:

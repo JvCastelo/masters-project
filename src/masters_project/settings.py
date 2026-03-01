@@ -7,6 +7,8 @@ from pydantic import BaseModel, ValidationError
 
 
 class GeneralSettings(BaseModel):
+    """Pipeline-wide configuration (dates, GOES/SONDA params, concurrency, logging)."""
+
     start_date: str
     end_date: str
     pixel_radius: int
@@ -19,18 +21,24 @@ class GeneralSettings(BaseModel):
 
 
 class StationSettings(BaseModel):
+    """Configuration for a single station (name and coordinates)."""
+
     name: str
     latitude: float
     longitude: float
 
 
 class PipelineConfig(BaseModel):
+    """Root configuration model: general settings, station list, and active station."""
+
     general: GeneralSettings
     stations: list[StationSettings]
     active_station: str
 
 
 class Settings:
+    """Application settings loader: reads pipeline config from JSON and exposes paths and station config."""
+
     PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
     PIPELINE_CONFIG_FILE = PROJECT_ROOT / "config" / "pipeline.json"
@@ -40,10 +48,19 @@ class Settings:
     PROCESSED_PATH = DATA_PATH / "processed"
     MODELS_PATH = DATA_PATH / "models"
 
-    def __init__(self):
+    def __init__(self) -> None:
+        """Load pipeline configuration from the configured JSON file."""
         self._config = self._load_config()
 
     def _load_config(self) -> PipelineConfig:
+        """Load and validate pipeline configuration from JSON.
+
+        Returns:
+            Validated PipelineConfig instance.
+
+        Note:
+            Calls sys.exit(1) if the config file is missing or invalid.
+        """
         if not self.PIPELINE_CONFIG_FILE.exists():
             print(f"CRITICAL: Config file not found at {self.PIPELINE_CONFIG_FILE}")
             sys.exit(1)
@@ -60,10 +77,19 @@ class Settings:
 
     @property
     def general(self) -> GeneralSettings:
+        """General pipeline settings (dates, GOES/SONDA, workers, log level)."""
         return self._config.general
 
     @property
     def station(self) -> StationSettings:
+        """Station settings for the active station (name, latitude, longitude).
+
+        Returns:
+            The StationSettings matching active_station in the config.
+
+        Raises:
+            ValueError: If active_station is not found in the stations list.
+        """
         target_name = self._config.active_station
 
         for station in self._config.stations:
@@ -74,7 +100,12 @@ class Settings:
             f"Active station '{target_name}' is not in your stations list."
         )
 
-    def setup_logging(self, log_name: str):
+    def setup_logging(self, log_name: str) -> None:
+        """Configure root logger with console and file handlers, and quiet third-party loggers.
+
+        Args:
+            log_name: Base name for the log file (e.g. 'goes_etl' -> goes_etl.log).
+        """
         self.LOG_PATH.mkdir(parents=True, exist_ok=True)
 
         formatter = logging.Formatter(

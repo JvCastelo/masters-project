@@ -26,7 +26,17 @@ channels = [GoesChannelEnums.C01.value]  ## Only one channel
 # channels = [channel.value for channel in GoesChannelEnums if channel.value != 'C02'] ## All channels but C02
 
 
-def process_single_file(path: str, target_i: int, target_j: int) -> pd.DataFrame:
+def process_single_file(path: str, target_i: int, target_j: int) -> pd.DataFrame | None:
+    """Download one GOES NetCDF from S3, extract a pixel window, and return a one-row DataFrame.
+
+    Args:
+        path: S3 object key for the NetCDF file.
+        target_i: Row index of the target pixel in the dataset grid.
+        target_j: Column index of the target pixel in the dataset grid.
+
+    Returns:
+        A DataFrame with one row of window features and timestamp, or None on failure.
+    """
     try:
         with client.get_file(path) as file:
             file_bytes = file.read()
@@ -49,7 +59,8 @@ def process_single_file(path: str, target_i: int, target_j: int) -> pd.DataFrame
         return None
 
 
-def main():
+def main() -> None:
+    """Run the GOES ETL: discover files by channel/date, extract windows at station coords, export CSV per channel."""
     for channel in channels:
         logger.info(f"--- Starting processing for channel {channel} ---")
 

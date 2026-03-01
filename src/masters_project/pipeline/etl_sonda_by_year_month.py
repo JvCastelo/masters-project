@@ -12,8 +12,8 @@ settings.setup_logging("'sonda_etl_year_month")
 logger = logging.getLogger(__name__)
 
 
-def main():
-
+def main() -> None:
+    """Run the monthly SONDA ETL: download ZIPs by year-month, extract, merge and trim to config dates, export CSV."""
     client = SondaClient(
         station=settings.station.name, data_type=settings.general.sonda_data_type
     )

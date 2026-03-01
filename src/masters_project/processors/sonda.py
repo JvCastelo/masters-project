@@ -11,10 +11,24 @@ logger = logging.getLogger(__name__)
 
 
 class SondaProcessor:
+    """Process SONDA ZIP archives: extract, load .dat into DataFrame, and format columns/timestamps."""
+
     @staticmethod
     @measure_memory
     @time_track
     def extract_zip(zip_path: Path, delete_zip: bool = True) -> Path:
+        """Extract a SONDA ZIP to a directory with the same base name, optionally removing the ZIP.
+
+        Args:
+            zip_path: Path to the .zip file.
+            delete_zip: If True, delete the ZIP after successful extraction. Defaults to True.
+
+        Returns:
+            Path to the extraction directory (zip_path with suffix removed).
+
+        Raises:
+            zipfile.BadZipFile: If the file is not a valid or readable ZIP.
+        """
         extraction_dir = zip_path.with_suffix("")
         extraction_dir.mkdir(parents=True, exist_ok=True)
 
@@ -43,7 +57,18 @@ class SondaProcessor:
     @measure_memory
     @time_track
     def create_dataframe(extraction_dir: Path) -> pd.DataFrame:
+        """Load the first .dat file in the directory into a DataFrame and remove the extraction dir.
 
+        Args:
+            extraction_dir: Directory containing the extracted SONDA .dat file(s).
+
+        Returns:
+            DataFrame with parsed timestamps from the .dat file.
+
+        Raises:
+            FileNotFoundError: If no .dat file is found in extraction_dir.
+            Exception: On read or cleanup failure (re-raised after logging).
+        """
         path_dat_file = next(extraction_dir.glob("*.dat"), None)
 
         if not path_dat_file:
@@ -73,6 +98,14 @@ class SondaProcessor:
     @measure_memory
     @time_track
     def format_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+        """Drop header row and unused columns, coerce glo_avg to numeric, localize timestamps to UTC.
+
+        Args:
+            df: Raw DataFrame from create_dataframe (SONDA .dat content).
+
+        Returns:
+            DataFrame with selected columns and UTC-localized timestamp.
+        """
         df = df.iloc[1:].reset_index(drop=True)
         columns_to_drop = [
             "acronym",
