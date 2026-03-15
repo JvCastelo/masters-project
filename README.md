@@ -48,19 +48,42 @@ Edit `config/pipeline.json` before running the pipeline:
 
 ## Running the Pipeline
 
-Run the ETL steps in order:
+To ensure the final feature set is consistent, follow this step-by-step execution sequence:
+
+### 1. Collect GOES Satellite Data
+
+Download and process satellite imagery for your desired spectral channels. Ensure the same date range is used for every channel to allow for proper temporal joining.
+
+**Note:** Because this process is computationally intensive and time-consuming, it is recommended to run the collection in smaller chronological batches to eventually cover your full target period.
+
+* **Action:** Set general.start_date and general.end_date in config/pipeline.json.
+* **Execution:** 
 
 ```bash
 # 1. GOES satellite data (by channel, date range)
 uv run python -m masters_project.pipeline.etl_goes_s3
+```
 
-# 2a. SONDA data (yearly downloads)
+### 2. Collect SONDA Ground Data
+
+Fetch the ground-truth radiation measurements for the target station. Ensure the date range matches the total period defined during the GOES data collection (e.g., from 2022-01-01 to 2022-03-31) to ensure the datasets can be synchronized.
+
+* **Action:** Ensure the SONDA period in `config/pipeline.json` matches your GOES period.
+* **Execution:**
+
+```bash
+# Yearly downloads
 uv run python -m masters_project.pipeline.etl_sonda_by_year
 
-# 2b. Or SONDA data (monthly downloads)
+# OR Monthly downloads
 uv run python -m masters_project.pipeline.etl_sonda_by_year_month
+```
 
-# 3. Merge GOES + SONDA and build final features
+### 3. Build Final Features
+
+Once data is collected, trigger the multi-stage merge to align all channels and ground data into a single ML-ready table.
+
+``` bash
 uv run python -m masters_project.pipeline.build_features
 ```
 

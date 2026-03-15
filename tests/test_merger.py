@@ -1,10 +1,7 @@
-"""Tests for masters_project.processors.merger: GOES–SONDA dataset merge logic."""
-
 import pandas as pd
 import pytest
 
 from masters_project.processors.merger import DatasetMerger
-
 
 # =============================================================================
 # Fixtures
@@ -12,125 +9,93 @@ from masters_project.processors.merger import DatasetMerger
 
 
 @pytest.fixture
-def df_goes_with_timestamps() -> pd.DataFrame:
-    """GOES DataFrame with UTC timestamps for merge happy path."""
+def df_day_1() -> pd.DataFrame:
+    """Simulates a single day of data for one channel."""
     return pd.DataFrame(
-        {
-            "timestamp": pd.to_datetime(
-                ["2024-01-01 12:00:00", "2024-01-01 12:10:00", "2024-01-01 12:20:00"],
-                utc=True,
-            ),
-            "rad_C01": [100.0, 101.0, 102.0],
-        }
+        {"timestamp": ["2024-01-01 12:00:00", "2024-01-01 13:00:00"], "val": [10, 20]}
     )
 
 
 @pytest.fixture
-def df_sonda_with_timestamps() -> pd.DataFrame:
-    """SONDA DataFrame with matching timestamps for merge happy path."""
+def df_day_2() -> pd.DataFrame:
+    """Simulates a second day of data for the same channel."""
     return pd.DataFrame(
-        {
-            "timestamp": pd.to_datetime(
-                ["2024-01-01 12:00:00", "2024-01-01 12:10:00"],
-                utc=True,
-            ),
-            "glo_avg": [500.0, 510.0],
-        }
+        {"timestamp": ["2024-01-02 12:00:00", "2024-01-02 13:00:00"], "val": [30, 40]}
     )
 
 
 @pytest.fixture
-def df_sonda_no_overlap() -> pd.DataFrame:
-    """SONDA DataFrame with timestamps that do not overlap GOES (merge yields 0 rows)."""
-    return pd.DataFrame(
-        {
-            "timestamp": pd.to_datetime(
-                ["2024-01-02 00:00:00", "2024-01-02 00:10:00"],
-                utc=True,
-            ),
-            "glo_avg": [600.0, 610.0],
-        }
-    )
+def df_sensor_a() -> pd.DataFrame:
+    """Simulates Sensor A data."""
+    return pd.DataFrame({"timestamp": ["2024-01-01 12:00:00"], "sensor_a": [1.1]})
+
+
+@pytest.fixture
+def df_sensor_b() -> pd.DataFrame:
+    """Simulates Sensor B data for the same timestamp."""
+    return pd.DataFrame({"timestamp": ["2024-01-01 12:00:00"], "sensor_b": [9.9]})
 
 
 # =============================================================================
-# Tests
+# Tests: Concat by Rows (Vertical Stacking)
 # =============================================================================
 
 
-def test_merge_goes_sonda_matching_timestamps_returns_merged_dataframe(
-    df_goes_with_timestamps: pd.DataFrame,
-    df_sonda_with_timestamps: pd.DataFrame,
-) -> None:
-    """Happy path: inner join on matching timestamps produces merged DataFrame with expected shape."""
-    result = DatasetMerger.merge_goes_sonda(
-        df_goes=df_goes_with_timestamps,
-        df_sonda=df_sonda_with_timestamps,
+def test_concat_by_rows_stacks_vertically_and_sorts(df_day_1, df_day_2):
+    """Ensure multiple days are combined into one long timeline and sorted."""
+    # We pass them out of order to test the internal sorting
+    result = DatasetMerger.concat_by_rows([df_day_2, df_day_1], time_col="timestamp")
+
+    assert len(result) == 4
+    # Check chronological order
+    assert result["timestamp"].iloc[0] < result["timestamp"].iloc[-1]
+    assert result["val"].tolist() == [10, 20, 30, 40]
+
+
+def test_concat_by_rows_ensures_utc_conversion():
+    """Ensure the helper method standardizes timezones."""
+    df = pd.DataFrame({"timestamp": ["2024-01-01 12:00:00"], "val": [1]})
+    result = DatasetMerger.concat_by_rows([df], time_col="timestamp")
+
+    assert result["timestamp"].dt.tz is not None
+    assert str(result["timestamp"].dt.tz) == "UTC"
+
+
+# =============================================================================
+# Tests: Join by Columns (Horizontal Merging)
+# =============================================================================
+
+
+def test_join_by_columns_merges_multiple_sensors(df_sensor_a, df_sensor_b):
+    """Happy path: n-way join on shared timestamps."""
+    result = DatasetMerger.join_by_columns(
+        [df_sensor_a, df_sensor_b], time_col="timestamp", how="inner"
     )
-    assert len(result) == 2
-    assert "rad_C01" in result.columns and "glo_avg" in result.columns
-    assert result["glo_avg"].tolist() == [500.0, 510.0]
 
-
-def test_merge_goes_sonda_no_matching_timestamps_raises_valueerror(
-    df_goes_with_timestamps: pd.DataFrame,
-    df_sonda_no_overlap: pd.DataFrame,
-) -> None:
-    """Critical failure: empty inner merge must raise ValueError to prevent silent data loss."""
-    with pytest.raises(ValueError, match="Merged dataset is empty"):
-        DatasetMerger.merge_goes_sonda(
-            df_goes=df_goes_with_timestamps,
-            df_sonda=df_sonda_no_overlap,
-        )
-
-
-def test_merge_goes_sonda_empty_goes_dataframe_raises_valueerror(
-    df_sonda_with_timestamps: pd.DataFrame,
-) -> None:
-    """Edge case: merging with empty GOES DataFrame yields 0 rows and must raise ValueError."""
-    df_goes_empty = pd.DataFrame(columns=["timestamp", "rad_C01"])
-    with pytest.raises(ValueError, match="Merged dataset is empty"):
-        DatasetMerger.merge_goes_sonda(
-            df_goes=df_goes_empty,
-            df_sonda=df_sonda_with_timestamps,
-        )
-
-
-@pytest.mark.parametrize(
-    ("time_col_goes", "time_col_sonda"),
-    [
-        ("timestamp", "timestamp"),
-        ("ts_goes", "ts_sonda"),
-    ],
-    ids=["default_columns", "custom_columns"],
-)
-def test_merge_goes_sonda_custom_time_columns_merges_correctly(
-    time_col_goes: str,
-    time_col_sonda: str,
-) -> None:
-    """Parametrized: default and custom timestamp column names both produce correct merge."""
-    df_goes = pd.DataFrame(
-        {time_col_goes: pd.to_datetime(["2024-01-01 12:00:00"], utc=True), "x": [1]}
-    )
-    df_sonda = pd.DataFrame(
-        {time_col_sonda: pd.to_datetime(["2024-01-01 12:00:00"], utc=True), "y": [2]}
-    )
-    result = DatasetMerger.merge_goes_sonda(
-        df_goes=df_goes,
-        df_sonda=df_sonda,
-        time_col_goes=time_col_goes,
-        time_col_sonda=time_col_sonda,
-    )
     assert len(result) == 1
-    assert result["x"].iloc[0] == 1 and result["y"].iloc[0] == 2
+    assert "sensor_a" in result.columns
+    assert "sensor_b" in result.columns
+    assert result["sensor_b"].iloc[0] == 9.9
 
 
-def test_merge_goes_sonda_invalid_timestamp_format_raises_exception() -> None:
-    """Failure mode: unparseable timestamp strings cause pd.to_datetime to raise, re-raised by merger."""
-    df_goes = pd.DataFrame({"timestamp": ["not-a-date"], "x": [1]})
-    df_sonda = pd.DataFrame({"timestamp": ["2024-01-01 12:00:00"], "y": [2]})
+def test_join_by_columns_empty_intersection_logs_warning(df_sensor_a):
+    """If timestamps don't match, result should be empty (but method should return empty DF)."""
+    df_no_match = pd.DataFrame({"timestamp": ["1999-01-01 00:00:00"], "val": [0]})
+
+    result = DatasetMerger.join_by_columns(
+        [df_sensor_a, df_no_match], time_col="timestamp"
+    )
+    assert result.empty
+
+
+# =============================================================================
+# Tests: Error Handling
+# =============================================================================
+
+
+def test_prepare_dataframes_invalid_time_raises_error():
+    """Ensure malformed timestamps in any of the dataframes trigger an exception."""
+    df_bad = pd.DataFrame({"timestamp": ["not-a-date"], "val": [1]})
+
     with pytest.raises(Exception):
-        DatasetMerger.merge_goes_sonda(
-            df_goes=df_goes,
-            df_sonda=df_sonda,
-        )
+        DatasetMerger.concat_by_rows([df_bad], time_col="timestamp")

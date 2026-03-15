@@ -66,7 +66,7 @@ def main() -> None:
 
         list_files_path = client.get_files_path(
             start_date=settings.general.start_date,
-            # end_date=settings.general.end_date,
+            end_date=settings.general.end_date,
             channel=channel,
         )
 

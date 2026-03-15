@@ -1,4 +1,5 @@
 import logging
+from collections import defaultdict
 
 import pandas as pd
 
@@ -12,45 +13,38 @@ logger = logging.getLogger(__name__)
 
 
 def build_final_dataset() -> None:
-    """Load GOES CSVs (all channels), merge with SONDA CSV, align by timestamp, drop NaNs, export final features CSV.
-
-    Reads paths from settings; merges GOES channels on timestamp, then inner-joins with SONDA.
-    Writes the result to the processed path. Exits early if GOES or SONDA data is missing.
     """
-    df_goes_combined = None
+    1. List all GOES files.
+    2. Group and concat by row for each channel.
+    3. Join channels together by timestamp.
+    4. Join with SONDA data.
+    """
+    goes_dir = settings.RAW_PATH / "goes"
 
-    for channel in GoesChannelEnums:
-        channel_val = channel.value
-        goes_path = (
-            settings.RAW_PATH
-            / "goes"
-            / f"goes_{channel_val}_st_{settings.general.start_date}_et_{settings.general.end_date}_{settings.station.name}.csv"
-        )
+    channel_groups = defaultdict(list)
 
-        if goes_path.exists():
-            logger.debug(f"Loading GOES dataset for channel: {channel_val}")
-            df_channel = pd.read_csv(goes_path, parse_dates=["timestamp"])
+    logger.info(f"Scanning directory: {goes_dir}")
 
-            if df_goes_combined is None:
-                df_goes_combined = df_channel
-                logger.info(
-                    f"Initialized GOES base with {channel_val}. Shape: {df_goes_combined.shape}"
-                )
-            else:
-                initial_rows = len(df_goes_combined)
-                df_goes_combined = pd.merge(
-                    df_goes_combined, df_channel, on="timestamp", how="inner"
-                )
-                logger.info(
-                    f"Merged {channel_val}. Shape: {df_goes_combined.shape}. "
-                    f"Dropped {initial_rows - len(df_goes_combined)} unaligned rows."
-                )
-        else:
-            logger.warning(f"No file found for {channel_val}. Skipping this channel.")
+    for file_path in goes_dir.glob("goes_*.csv"):
+        for channel in GoesChannelEnums:
+            if f"goes_{channel.value}_" in file_path.name:
+                logger.debug(f"Found file for {channel.value}: {file_path.name}")
+                df = pd.read_csv(file_path)
+                channel_groups[channel.value].append(df)
+                break
 
-    if df_goes_combined is None or df_goes_combined.empty:
-        logger.error("No valid GOES data was loaded! Halting pipeline.")
+    if not channel_groups:
+        logger.error("No GOES files found. Check paths and naming conventions.")
         return
+
+    channel_dfs = []
+    for channel_val, df_list in channel_groups.items():
+        logger.info(f"Concatenating {len(df_list)} files for channel {channel_val}")
+        df_chan_stacked = DatasetMerger.concat_by_rows(df_list, time_col="timestamp")
+        channel_dfs.append(df_chan_stacked)
+
+    logger.info("Joining all GOES channels into a single feature set.")
+    df_goes_combined = DatasetMerger.join_by_columns(channel_dfs, time_col="timestamp")
 
     sonda_path = (
         settings.RAW_PATH
@@ -59,35 +53,27 @@ def build_final_dataset() -> None:
     )
 
     if not sonda_path.exists():
-        logger.error(f"SONDA file not found at: {sonda_path}. Halting pipeline.")
+        logger.error(f"SONDA file not found: {sonda_path}")
         return
 
-    logger.info(f"Loading SONDA dataset from: {sonda_path}")
-    df_sonda = pd.read_csv(sonda_path, parse_dates=["timestamp"])
+    df_sonda = pd.read_csv(sonda_path)
 
-    logger.info("Aligning GOES satellite features with SONDA ground targets...")
-    df_final = DatasetMerger.merge_goes_sonda(
-        df_goes=df_goes_combined,
-        df_sonda=df_sonda,
-        time_col_goes="timestamp",
-        time_col_sonda="timestamp",
+    logger.info("Merging GOES features with SONDA ground targets...")
+    df_final = DatasetMerger.join_by_columns(
+        [df_goes_combined, df_sonda], time_col="timestamp", how="inner"
     )
 
-    initial_final_rows = len(df_final)
-    logger.info("Purging rows with missing target values (NaNs)...")
+    initial_len = len(df_final)
     df_final = df_final.dropna().reset_index(drop=True)
 
-    dropped_nans = initial_final_rows - len(df_final)
-    if dropped_nans > 0:
-        logger.warning(
-            f"Dropped {dropped_nans} rows containing NaNs. These cannot be used for ML training."
-        )
+    logger.info(
+        f"Final dataset ready. Dropped {initial_len - len(df_final)} rows with NaNs."
+    )
 
     output_path = (
         settings.PROCESSED_PATH
         / f"final_features_st_{settings.general.start_date}_et_{settings.general.end_date}_{settings.station.name}.csv"
     )
-
     CSVExporter().export(df_final, output_path)
 
 
