@@ -106,7 +106,10 @@ def test_open_as_dataset_file_like_object_returns_dataset(
 @pytest.mark.parametrize(
     ("dataset_name", "expected_channel"),
     [
-        ("OR_ABI-L1b-RadM1-C01_G16_s20240011200000_e20240011205999_c20240011205999", "C01"),
+        (
+            "OR_ABI-L1b-RadM1-C01_G16_s20240011200000_e20240011205999_c20240011205999",
+            "C01",
+        ),
         ("", "UNK"),
         ("malformed", "UNK"),
     ],

@@ -19,6 +19,7 @@ def time_track(func):
     Returns:
         The wrapper function that invokes func and logs execution time.
     """
+
     @wraps(func)
     def wrapper(*args, **kwargs):
         start_time = time.perf_counter()
@@ -46,6 +47,7 @@ def measure_memory(func):
     Returns:
         The wrapper function that invokes func and logs memory stats.
     """
+
     @wraps(func)
     def wrapper(*args, **kwargs):
         with _memory_lock:

@@ -86,7 +86,9 @@ def test_csv_exporter_save_to_disk_called_with_correct_arguments(
     """Verifies export delegates to _save_to_disk with the same df and destination."""
     dest = tmp_output_path / "delegate.csv"
     exporter = CSVExporter()
-    with patch.object(exporter, "_save_to_disk", wraps=exporter._save_to_disk) as mock_save:
+    with patch.object(
+        exporter, "_save_to_disk", wraps=exporter._save_to_disk
+    ) as mock_save:
         exporter.export(sample_dataframe, dest)
         mock_save.assert_called_once()
         call_args = mock_save.call_args
