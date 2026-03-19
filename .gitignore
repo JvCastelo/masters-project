@@ -14,6 +14,7 @@ wheels/
 data/
 *.csv
 *.parquet
+models/*.joblib
 
 # IDE
 .vscode
