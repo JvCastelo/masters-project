@@ -18,6 +18,7 @@ class GeneralSettings(BaseModel):
     goes_variable: str
     max_workers: int = 10
     log_level: str = "INFO"
+    selected_channel: str
 
 
 class StationSettings(BaseModel):

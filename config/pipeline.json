@@ -1,14 +1,15 @@
 {
   "general": {
     "start_date": "2022-01-01",
-    "end_date": "2022-03-31",
+    "end_date": "2022-01-01",
     "pixel_radius": 1,
     "sonda_data_type": "solarimetricos",
     "goes_product_name": "ABI-L1b-RadF",
     "goes_bucket_name": "noaa-goes16",
     "goes_variable": "Rad",
     "max_workers": 15,
-    "log_level": "INFO"
+    "log_level": "INFO",
+    "selected_channel": "C01"
   },
   "stations": [
     {
