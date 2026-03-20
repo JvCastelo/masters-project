@@ -22,7 +22,7 @@ class BaseRadiationModel(ABC):
     def predict(self, X_new):
         if not self.is_trained:
             raise ValueError("Model must be trained or loaded before predicting!")
-        X_new_scaled = self.scaler.fit_transform(X_new)
+        X_new_scaled = self.scaler.transform(X_new)
         return self.model.predict(X_new_scaled)
 
     def save(self, filepath: str):

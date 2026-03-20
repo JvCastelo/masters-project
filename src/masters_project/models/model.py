@@ -5,10 +5,10 @@ from masters_project.models.base import BaseRadiationModel
 
 
 class KNNModel(BaseRadiationModel):
-    def __init__(self, n_neighbors: int = 5):
+    def __init__(self, n_neighbors: int = 5, n_jobs: int = -1):
         super().__init__()
 
-        self.model = KNeighborsRegressor(n_neighbors=n_neighbors, n_jobs=-1)
+        self.model = KNeighborsRegressor(n_neighbors=n_neighbors, n_jobs=n_jobs)
 
 
 class XGBoostModel(BaseRadiationModel):
