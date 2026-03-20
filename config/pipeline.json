@@ -1,27 +1,47 @@
 {
-  "general": {
+  "execution": {
     "start_date": "2022-01-01",
     "end_date": "2022-01-01",
-    "pixel_radius": 1,
-    "sonda_data_type": "solarimetricos",
-    "goes_product_name": "ABI-L1b-RadF",
-    "goes_bucket_name": "noaa-goes16",
-    "goes_variable": "Rad",
+    "selected_station": "CACHOEIRA_PAULISTA",
+    "selected_model": "KNN",
     "max_workers": 15,
-    "log_level": "INFO",
-    "selected_channel": "C01"
+    "log_level": "INFO"
   },
-  "stations": [
-    {
-      "name": "PETROLINA",
+  "etl_config": {
+    "goes": {
+      "bucket_name": "noaa-goes16",
+      "product_name": "ABI-L1b-RadF",
+      "variable": "Rad",
+      "selected_channel": "C01",
+      "pixel_radius": 1
+    },
+    "sonda": {
+      "data_type": "solarimetricos",
+      "target_variable": "glo_avg"
+    }
+  },
+  "ml_config": {
+    "test_size": 0.2,
+    "models": {
+      "KNN": {
+        "n_neighbors": 5,
+        "n_jobs": -1
+      },
+      "XGBoost": {
+        "n_estimators": 100,
+        "learning_rate": 0.1,
+        "n_jobs": -1
+      }
+    }
+  },
+  "stations": {
+    "PETROLINA": {
       "latitude": -9.069,
       "longitude": -40.320
     },
-    {
-      "name": "CACHOEIRA_PAULISTA",
+    "CACHOEIRA_PAULISTA": {
       "latitude": -22.690,
       "longitude": -45.006
     }
-  ],
-  "active_station": "CACHOEIRA_PAULISTA"
+  }
 }

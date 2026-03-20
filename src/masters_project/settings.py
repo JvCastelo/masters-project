@@ -6,39 +6,75 @@ from pathlib import Path
 from pydantic import BaseModel, ValidationError
 
 
-class GeneralSettings(BaseModel):
-    """Pipeline-wide configuration (dates, GOES/SONDA params, concurrency, logging)."""
+class ExecutionSettings(BaseModel):
+    """Pipeline execution controls (dates, selections, resources)."""
 
     start_date: str
     end_date: str
-    pixel_radius: int
-    sonda_data_type: str
-    goes_product_name: str
-    goes_bucket_name: str
-    goes_variable: str
+    selected_station: str
+    selected_model: str
     max_workers: int = 10
     log_level: str = "INFO"
+
+
+class GoesConfig(BaseModel):
+    """Configuration specific to the GOES-16 satellite ETL process."""
+
+    bucket_name: str
+    product_name: str
+    variable: str
     selected_channel: str
+    pixel_radius: int
+
+
+class SondaConfig(BaseModel):
+    """Configuration specific to the SONDA ground station ETL process."""
+
+    data_type: str
+    target_variable: str
+
+
+class EtlConfig(BaseModel):
+    """Wrapper for all ETL related configurations."""
+
+    goes: GoesConfig
+    sonda: SondaConfig
+
+
+class ModelSettings(BaseModel):
+    """Configuration for a specific Machine Learning model."""
+
+    n_neighbors: int | None = None
+    n_jobs: int | None = None
+    n_estimators: int | None = None
+    learning_rate: float | None = None
+
+
+class MlConfig(BaseModel):
+    """Wrapper for all Machine Learning related configurations."""
+
+    test_size: float
+    models: dict[str, ModelSettings]
 
 
 class StationSettings(BaseModel):
-    """Configuration for a single station (name and coordinates)."""
+    """Configuration for a single station's coordinates."""
 
-    name: str
     latitude: float
     longitude: float
 
 
 class PipelineConfig(BaseModel):
-    """Root configuration model: general settings, station list, and active station."""
+    """Root configuration model containing all sub-configurations."""
 
-    general: GeneralSettings
-    stations: list[StationSettings]
-    active_station: str
+    execution: ExecutionSettings
+    etl_config: EtlConfig
+    ml_config: MlConfig
+    stations: dict[str, StationSettings]
 
 
 class Settings:
-    """Application settings loader: reads pipeline config from JSON and exposes paths and station config."""
+    """Application settings loader: reads pipeline config from JSON and exposes paths and config."""
 
     PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -47,21 +83,15 @@ class Settings:
     LOG_PATH = DATA_PATH / "logs"
     RAW_PATH = DATA_PATH / "raw"
     PROCESSED_PATH = DATA_PATH / "processed"
-    MODELS_PATH = DATA_PATH / "models"
+    MODELS_PATH = PROJECT_ROOT / "models"
+    RESULTS_PATH = PROJECT_ROOT / "results"
 
     def __init__(self) -> None:
         """Load pipeline configuration from the configured JSON file."""
         self._config = self._load_config()
 
     def _load_config(self) -> PipelineConfig:
-        """Load and validate pipeline configuration from JSON.
-
-        Returns:
-            Validated PipelineConfig instance.
-
-        Note:
-            Calls sys.exit(1) if the config file is missing or invalid.
-        """
+        """Load and validate pipeline configuration from JSON."""
         if not self.PIPELINE_CONFIG_FILE.exists():
             print(f"CRITICAL: Config file not found at {self.PIPELINE_CONFIG_FILE}")
             sys.exit(1)
@@ -77,36 +107,39 @@ class Settings:
             sys.exit(1)
 
     @property
-    def general(self) -> GeneralSettings:
-        """General pipeline settings (dates, GOES/SONDA, workers, log level)."""
-        return self._config.general
+    def execution(self) -> ExecutionSettings:
+        return self._config.execution
+
+    @property
+    def etl(self) -> EtlConfig:
+        return self._config.etl_config
+
+    @property
+    def ml(self) -> MlConfig:
+        return self._config.ml_config
 
     @property
     def station(self) -> StationSettings:
-        """Station settings for the active station (name, latitude, longitude).
+        """Instantly looks up the selected station without needing a loop!"""
+        target_name = self.execution.selected_station
+        if target_name not in self._config.stations:
+            raise ValueError(
+                f"Selected station '{target_name}' is not in your stations list."
+            )
+        return self._config.stations[target_name]
 
-        Returns:
-            The StationSettings matching active_station in the config.
-
-        Raises:
-            ValueError: If active_station is not found in the stations list.
-        """
-        target_name = self._config.active_station
-
-        for station in self._config.stations:
-            if station.name == target_name:
-                return station
-
-        raise ValueError(
-            f"Active station '{target_name}' is not in your stations list."
-        )
+    @property
+    def model(self) -> ModelSettings:
+        """Instantly looks up the selected model without needing a loop!"""
+        target_name = self.execution.selected_model
+        if target_name not in self.ml.models:
+            raise ValueError(
+                f"Selected model '{target_name}' is not in your models list."
+            )
+        return self.ml.models[target_name]
 
     def setup_logging(self, log_name: str) -> None:
-        """Configure root logger with console and file handlers, and quiet third-party loggers.
-
-        Args:
-            log_name: Base name for the log file (e.g. 'goes_etl' -> goes_etl.log).
-        """
+        """Configure root logger with console and file handlers."""
         self.LOG_PATH.mkdir(parents=True, exist_ok=True)
 
         formatter = logging.Formatter(
@@ -114,7 +147,7 @@ class Settings:
         )
 
         console_handler = logging.StreamHandler(sys.stdout)
-        console_handler.setLevel(self.general.log_level)
+        console_handler.setLevel(self.execution.log_level)
         console_handler.setFormatter(formatter)
 
         file_path = self.LOG_PATH / f"{log_name}.log"

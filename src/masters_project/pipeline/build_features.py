@@ -49,7 +49,7 @@ def build_final_dataset() -> None:
     sonda_path = (
         settings.RAW_PATH
         / "sonda"
-        / f"sonda_{settings.general.sonda_data_type}_st_{settings.general.start_date}_et_{settings.general.end_date}_{settings.station.name}.csv"
+        / f"sonda_{settings.etl.sonda.data_type}_st_{settings.execution.start_date}_et_{settings.execution.end_date}_{settings.execution.selected_station}.csv"
     )
 
     if not sonda_path.exists():
@@ -72,7 +72,7 @@ def build_final_dataset() -> None:
 
     output_path = (
         settings.PROCESSED_PATH
-        / f"final_features_st_{settings.general.start_date}_et_{settings.general.end_date}_{settings.station.name}.csv"
+        / f"final_features_st_{settings.execution.start_date}_et_{settings.execution.end_date}_{settings.execution.selected_station}.csv"
     )
     CSVExporter().export(df_final, output_path)
 

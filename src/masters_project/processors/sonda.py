@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from masters_project.settings import settings
 from masters_project.utils import measure_memory, time_track
 
 logger = logging.getLogger(__name__)
@@ -107,23 +108,15 @@ class SondaProcessor:
             DataFrame with selected columns and UTC-localized timestamp.
         """
         df = df.iloc[1:].reset_index(drop=True)
-        columns_to_drop = [
-            "acronym",
-            "year",
-            "day",
-            "min",
-            "dir_avg",
-            "dif_avg",
-            "lw_avg",
-            "par_avg",
-            "lux_avg",
-        ]
-        existing_cols_to_drop = [col for col in columns_to_drop if col in df.columns]
+        columns_to_maintain = [settings.etl.sonda.target_variable, "timestamp"]
+        columns_to_drop = [col for col in df.columns if col not in columns_to_maintain]
         df.drop(
-            columns=existing_cols_to_drop,
+            columns=columns_to_drop,
             inplace=True,
         )
-        df["glo_avg"] = pd.to_numeric(df["glo_avg"], errors="coerce")
+        df[settings.etl.sonda.target_variable] = pd.to_numeric(
+            df[settings.etl.sonda.target_variable], errors="coerce"
+        )
 
         logger.debug("Localizing timestamps to UTC...")
         df["timestamp"] = df["timestamp"].dt.tz_localize("UTC")

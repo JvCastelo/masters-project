@@ -18,8 +18,8 @@ logger = logging.getLogger(__name__)
 hdf5_lock = Lock()
 
 client = GoesS3Client(
-    product_name=settings.general.goes_product_name,
-    bucket_name=settings.general.goes_bucket_name,
+    product_name=settings.etl.goes.product_name,
+    bucket_name=settings.etl.goes.bucket_name,
 )
 
 
@@ -48,8 +48,8 @@ def process_single_file(path: str, target_i: int, target_j: int) -> pd.DataFrame
 
                 return GoesProcessor.extract_window_to_df(
                     ds,
-                    variable=settings.general.goes_variable,
-                    radius=settings.general.pixel_radius,
+                    variable=settings.etl.goes.variable,
+                    radius=settings.etl.goes.pixel_radius,
                 )
     except Exception:
         logger.exception(f"Failed to process {path}")
@@ -59,13 +59,13 @@ def process_single_file(path: str, target_i: int, target_j: int) -> pd.DataFrame
 def main() -> None:
     """Run the GOES ETL: discover files by channel/date, extract windows at station coords, export CSV per channel."""
 
-    channel = GoesChannelEnums[settings.general.selected_channel]
+    channel = GoesChannelEnums[settings.etl.goes.selected_channel]
 
     logger.info(f"--- Starting processing for channel {channel} ---")
 
     list_files_path = client.get_files_path(
-        start_date=settings.general.start_date,
-        end_date=settings.general.end_date,
+        start_date=settings.execution.start_date,
+        end_date=settings.execution.end_date,
         channel=channel,
     )
 
@@ -94,8 +94,8 @@ def main() -> None:
 
             first_df = GoesProcessor.extract_window_to_df(
                 ds,
-                variable=settings.general.goes_variable,
-                radius=settings.general.pixel_radius,
+                variable=settings.etl.goes.variable,
+                radius=settings.etl.goes.pixel_radius,
             )
 
             all_dfs.append(first_df)
@@ -109,7 +109,7 @@ def main() -> None:
         f"Target locked at i={target_index_i}, j={target_index_j}. Commencing threaded downloads."
     )
 
-    with ThreadPoolExecutor(max_workers=settings.general.max_workers) as executor:
+    with ThreadPoolExecutor(max_workers=settings.execution.max_workers) as executor:
         future_to_path = {
             executor.submit(
                 process_single_file, path, target_index_i, target_index_j
@@ -135,7 +135,7 @@ def main() -> None:
         base_path = (
             settings.RAW_PATH
             / "goes"
-            / f"goes_{channel}_st_{settings.general.start_date}_et_{settings.general.end_date}_{settings.station.name}.csv"
+            / f"goes_{channel}_st_{settings.execution.start_date}_et_{settings.execution.end_date}_{settings.execution.selected_station}.csv"
         )
 
         CSVExporter().export(df_goes, base_path)

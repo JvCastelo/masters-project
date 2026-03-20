@@ -15,16 +15,17 @@ logger = logging.getLogger(__name__)
 def main() -> None:
     """Run the yearly SONDA ETL: download ZIPs by year, extract, merge and trim to config dates, export CSV."""
     client = SondaClient(
-        station=settings.station.name, data_type=settings.general.sonda_data_type
+        station=settings.execution.selected_station,
+        data_type=settings.etl.sonda.data_type,
     )
 
     years_to_fetch = get_target_years(
-        start_date=settings.general.start_date, end_date=settings.general.end_date
+        start_date=settings.execution.start_date, end_date=settings.execution.end_date
     )
 
     logger.info(
         f"--- STARTING YEARLY SONDA EXTRACTION ---\n"
-        f"Target Station: {settings.station.name}\n"
+        f"Target Station: {settings.execution.selected_station}\n"
         f"Required Years: {years_to_fetch}"
     )
 
@@ -52,11 +53,11 @@ def main() -> None:
         df_sonda = pd.concat(all_dfs, ignore_index=True)
 
         logger.info(
-            f"Trimming dataset strictly to bounds: {settings.general.start_date} to {settings.general.end_date}"
+            f"Trimming dataset strictly to bounds: {settings.execution.start_date} to {settings.execution.end_date}"
         )
 
-        start_bound = pd.to_datetime(settings.general.start_date).tz_localize("UTC")
-        end_bound = pd.to_datetime(settings.general.end_date).tz_localize(
+        start_bound = pd.to_datetime(settings.execution.start_date).tz_localize("UTC")
+        end_bound = pd.to_datetime(settings.execution.end_date).tz_localize(
             "UTC"
         ) + pd.Timedelta(days=1, seconds=-1)
 
@@ -71,7 +72,7 @@ def main() -> None:
         base_path = (
             settings.RAW_PATH
             / "sonda"
-            / f"sonda_{settings.general.sonda_data_type}_st_{settings.general.start_date}_et_{settings.general.end_date}_{settings.station.name}.csv"
+            / f"sonda_{settings.etl.sonda.data_type}_st_{settings.execution.start_date}_et_{settings.execution.end_date}_{settings.execution.selected_station}.csv"
         )
 
         CSVExporter().export(df_sonda, base_path)
