@@ -1,3 +1,5 @@
+"""GOES ETL: list NetCDF keys on S3, extract pixel windows, export per-channel CSV."""
+
 import io
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed

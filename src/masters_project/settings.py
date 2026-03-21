@@ -103,7 +103,14 @@ class Settings:
         self._config = self._load_config()
 
     def _load_config(self) -> PipelineConfig:
-        """Load and validate pipeline configuration from JSON."""
+        """Load and validate pipeline configuration from JSON.
+
+        Returns:
+            Parsed and validated ``PipelineConfig``.
+
+        Note:
+            Exits the process with code 1 if the file is missing or invalid JSON/Pydantic.
+        """
         if not self.PIPELINE_CONFIG_FILE.exists():
             print(f"CRITICAL: Config file not found at {self.PIPELINE_CONFIG_FILE}")
             sys.exit(1)
@@ -120,23 +127,31 @@ class Settings:
 
     @property
     def execution(self) -> ExecutionSettings:
+        """Execution-wide settings: dates, selected station/model, workers, log level."""
         return self._config.execution
 
     @property
     def etl(self) -> EtlConfig:
+        """ETL configuration for GOES and SONDA (products, channels, target variable)."""
         return self._config.etl_config
 
     @property
     def ml(self) -> MlConfig:
+        """Machine learning configuration: test split, metrics, and per-model hyperparameters."""
         return self._config.ml_config
 
     @property
     def tuning(self) -> TuningConfig:
+        """Hyperparameter search settings (RandomizedSearchCV-style)."""
         return self._config.tuning_config
 
     @property
     def station(self) -> StationSettings:
-        """Instantly looks up the selected station without needing a loop!"""
+        """Coordinates for ``execution.selected_station`` from the ``stations`` map.
+
+        Raises:
+            ValueError: If the selected station key is not present in ``stations``.
+        """
         target_name = self.execution.selected_station
         if target_name not in self._config.stations:
             raise ValueError(
@@ -146,7 +161,11 @@ class Settings:
 
     @property
     def model(self) -> ModelSettings:
-        """Instantly looks up the selected model without needing a loop!"""
+        """Hyperparameters for ``execution.selected_model`` from ``ml_config.models``.
+
+        Raises:
+            ValueError: If the selected model key is not present in ``models``.
+        """
         target_name = self.execution.selected_model
         if target_name not in self.ml.models:
             raise ValueError(

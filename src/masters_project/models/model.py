@@ -5,14 +5,18 @@ from masters_project.models.base import BaseRadiationModel
 
 
 class KNNModel(BaseRadiationModel):
-    def __init__(self, n_neighbors: int = 5, n_jobs: int = -1):
+    """K-nearest neighbors regressor for radiation prediction."""
+
+    def __init__(self, n_neighbors: int = 5, n_jobs: int = -1) -> None:
         super().__init__()
 
         self.model = KNeighborsRegressor(n_neighbors=n_neighbors, n_jobs=n_jobs)
 
 
 class XGBoostModel(BaseRadiationModel):
-    def __init__(self, n_estimators: int = 100, learning_rate: float = 0.1):
+    """Gradient boosted trees (XGBoost) regressor for radiation prediction."""
+
+    def __init__(self, n_estimators: int = 100, learning_rate: float = 0.1) -> None:
         super().__init__()
         self.model = XGBRegressor(
             n_estimators=n_estimators,

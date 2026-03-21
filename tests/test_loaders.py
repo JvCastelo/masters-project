@@ -1,12 +1,14 @@
-"""Tests for masters_project.loaders: DataExporter, CSVExporter, ParquetExporter."""
+"""Tests for masters_project.loaders: DataFrameExporter, CSVExporter, ParquetExporter, JSONExporter."""
 
+import json
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
 
 from masters_project.loaders.csv import CSVExporter
+from masters_project.loaders.json import JSONExporter
 from masters_project.loaders.parquet import ParquetExporter
 
 
@@ -71,7 +73,7 @@ def test_exporter_creates_parent_directory_when_missing(
 
 @patch("pandas.DataFrame.to_parquet")
 def test_parquet_exporter_export_calls_to_parquet_with_correct_args(
-    mock_to_parquet: patch, sample_dataframe: pd.DataFrame, tmp_output_path: Path
+    mock_to_parquet: MagicMock, sample_dataframe: pd.DataFrame, tmp_output_path: Path
 ) -> None:
     """Happy path: ParquetExporter delegates to df.to_parquet with destination and index=False."""
     dest = tmp_output_path / "data.parquet"
@@ -94,3 +96,23 @@ def test_csv_exporter_save_to_disk_called_with_correct_arguments(
         call_args = mock_save.call_args
         assert call_args[0][0].equals(sample_dataframe)
         assert call_args[0][1] == dest
+
+
+def test_json_exporter_export_non_empty_dict_writes_roundtrip(
+    tmp_path: Path,
+) -> None:
+    """Happy path: JSONExporter writes UTF-8 JSON and content round-trips."""
+    dest = tmp_path / "metrics.json"
+    payload = {"model_type": "KNN", "rmse": 1.23}
+    JSONExporter().export(payload, dest)
+    assert dest.exists()
+    assert json.loads(dest.read_text(encoding="utf-8")) == payload
+
+
+def test_json_exporter_export_empty_dict_skips_without_error(
+    tmp_path: Path,
+) -> None:
+    """Edge case: empty dict must be skipped (no write, no exception)."""
+    dest = tmp_path / "empty.json"
+    JSONExporter().export({}, dest)
+    assert not dest.exists()

@@ -1,3 +1,5 @@
+"""Hyperparameter search with RandomizedSearchCV; save best params to JSON."""
+
 import logging
 
 from sklearn.model_selection import RandomizedSearchCV
@@ -15,8 +17,8 @@ settings.setup_logging("tuning_pipeline")
 logger = logging.getLogger(__name__)
 
 
-def main():
-
+def main() -> None:
+    """Run randomized search for ``execution.selected_model``; export tuning JSON."""
     logger.info("--- Starting ML Tuning Pipeline ---")
 
     model_name = settings.execution.selected_model
@@ -53,7 +55,7 @@ def main():
 
     tuning_results = {
         "model_type": model_name,
-        "station": settings.execution.active_station,
+        "station": settings.execution.selected_station,
         "start_time": settings.execution.start_date,
         "end_time": settings.execution.end_date,
         "best_rmse": round(best_score, 3),
@@ -63,7 +65,7 @@ def main():
     output_path = file_paths.model_tuning(model_name, "v1")
 
     exporter = JSONExporter()
-    exporter.export(data=tuning_results, destination=output_path)
+    exporter.export(tuning_results, output_path)
 
     logger.info(f"Tuning results permanently saved to {output_path}")
 

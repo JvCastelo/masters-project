@@ -1,11 +1,13 @@
 import logging
+from typing import Any
 
+from sklearn.base import BaseEstimator
 from sklearn.neighbors import KNeighborsRegressor
 from xgboost import XGBRegressor
 
 logger = logging.getLogger(__name__)
 
-TUNING_REGISTRY = {
+TUNING_REGISTRY: dict[str, dict[str, Any]] = {
     "XGBOOST": {
         "estimator": XGBRegressor(random_state=42, n_jobs=-1),
         "param_grid": {
@@ -26,11 +28,23 @@ TUNING_REGISTRY = {
 }
 
 
-def get_tuning_config(model_name: str):
-    """
-    Fetches the raw algorithm and its specific hyperparameter grid.
-    """
+def get_tuning_config(
+    model_name: str,
+) -> tuple[BaseEstimator, dict[str, list[Any]]]:
+    """Return a sklearn estimator and its hyperparameter grid for RandomizedSearchCV.
 
+    Model names are matched case-insensitively against ``TUNING_REGISTRY`` keys.
+
+    Args:
+        model_name: Registry key (e.g. ``\"KNN\"``, ``\"XGBOOST\"``).
+
+    Returns:
+        Tuple of ``(estimator, param_distributions)`` for use with
+        :class:`sklearn.model_selection.RandomizedSearchCV`.
+
+    Raises:
+        ValueError: If ``model_name`` is not in the registry.
+    """
     name_upper = model_name.upper()
 
     if name_upper not in TUNING_REGISTRY:

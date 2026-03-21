@@ -1,3 +1,5 @@
+"""SONDA ETL (yearly): download yearly ZIPs per calendar year, export trimmed CSV."""
+
 import logging
 
 import pandas as pd

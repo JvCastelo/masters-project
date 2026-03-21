@@ -1,3 +1,5 @@
+"""Build merged model input: stack GOES channels, join SONDA, drop NaNs, export CSV."""
+
 import logging
 from collections import defaultdict
 
@@ -14,11 +16,9 @@ logger = logging.getLogger(__name__)
 
 
 def build_model_input() -> None:
-    """
-    1. List all GOES files.
-    2. Group and concat by row for each channel.
-    3. Join channels together by timestamp.
-    4. Join with SONDA data.
+    """Concatenate GOES CSVs per channel, inner-join channels on time, join SONDA, drop NaNs.
+
+    Writes the result to :func:`~masters_project.file_paths.FilePathBuilder.model_input`.
     """
     goes_dir = settings.RAW_PATH / "goes"
 

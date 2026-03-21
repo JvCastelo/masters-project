@@ -1,6 +1,8 @@
 import logging
+from typing import Any
 
 import numpy as np
+from numpy.typing import ArrayLike
 from sklearn.metrics import (
     mean_absolute_error,
     mean_absolute_percentage_error,
@@ -23,13 +25,26 @@ METRIC_REGISTRY = {
 }
 
 
-def evaluate_performance(y_target, y_predicted, model_name: str):
-    """
-    Calculates ML metrics (RMSE, R2) and saves them to a JSON report.
+def evaluate_performance(
+    y_target: ArrayLike, y_predicted: ArrayLike, model_name: str
+) -> None:
+    """Compute configured sklearn metrics and write results to JSON via :class:`JSONExporter`.
+
+    Metrics are selected from ``settings.ml.evaluation_metrics``; unsupported names are
+    skipped with a warning.
+
+    Args:
+        y_target: Ground-truth target values (array-like).
+        y_predicted: Model predictions (array-like, same length as ``y_target``).
+        model_name: Label stored in the output JSON under ``model_type``.
+
+    Note:
+        Writes to ``file_paths.model_metrics(model_name, \"v1\")``. Does not return
+        the metrics dict (side effect only).
     """
     logger.info("Calculating requested performance metrics...")
 
-    results = {
+    results: dict[str, Any] = {
         "model_type": model_name,
         "station": settings.execution.selected_station,
         "start_date": settings.execution.start_date,
@@ -54,8 +69,6 @@ def evaluate_performance(y_target, y_predicted, model_name: str):
 
     output_path = file_paths.model_metrics(model_name, "v1")
     exporter = JSONExporter()
-    exporter.export(data=results, destination=output_path)
+    exporter.export(results, output_path)
 
     logger.info(f"Metrics report saved to {output_path}")
-
-    return

@@ -8,7 +8,8 @@ The pipeline:
 
 1. **GOES ETL** — Downloads GOES-R ABI NetCDF files from NOAA's Open Data Registry (S3), extracts pixel windows around a target station, and exports per-channel CSVs.
 2. **SONDA ETL** — Downloads SONDA ZIP archives by year or year-month, extracts `.dat` files, and exports formatted CSVs with timestamps and radiation variables.
-3. **Build Features** — Merges GOES and SONDA datasets on timestamp, drops rows with NaNs, and exports the final feature table for modeling.
+3. **Build model input** — Merges GOES channels and SONDA on timestamp, drops rows with NaNs, and exports the processed CSV for ML.
+4. **Training / tuning** (optional) — Train or tune models on the merged dataset; metrics and artifacts are written under `data/`.
 
 ## Requirements
 
@@ -31,67 +32,59 @@ pip install -e .
 
 ## Configuration
 
-Edit `config/pipeline.json` before running the pipeline:
+Edit `config/pipeline.json` before running the pipeline.
 
-| Field | Description |
-|-------|-------------|
-| `general.start_date` | Start date (YYYY-MM-DD) |
-| `general.end_date` | End date (YYYY-MM-DD) |
-| `general.pixel_radius` | Half-width of the pixel window around the station |
-| `general.sonda_data_type` | SONDA product type (e.g. `solarimetricos`) |
-| `general.goes_product_name` | GOES product (e.g. `ABI-L1b-RadF`) |
-| `general.goes_bucket_name` | S3 bucket (e.g. `noaa-goes16`) |
-| `general.goes_variable` | Variable to extract (e.g. `Rad`) |
-| `general.max_workers` | Thread pool size for GOES downloads |
-| `stations` | List of `{name, latitude, longitude}` |
-| `active_station` | Station name to use from the list |
+| Section | Description |
+|---------|-------------|
+| `execution` | `start_date`, `end_date` (YYYY-MM-DD), `selected_station` (key in `stations`), `selected_model` (key in `ml_config.models`), `max_workers`, `log_level` |
+| `etl_config.goes` | `bucket_name`, `product_name`, `variable`, `selected_channel`, `pixel_radius` |
+| `etl_config.sonda` | `data_type`, `target_variable` |
+| `ml_config` | `test_size`, `evaluation_metrics`, `models` (per-model hyperparameters, e.g. `KNN`, `XGBoost`) |
+| `tuning_config` | `n_iter`, `cv`, `scoring`, `n_jobs`, `verbose` |
+| `stations` | Object mapping station name to `{ "latitude", "longitude" }` |
 
 ## Running the Pipeline
 
-To ensure the final feature set is consistent, follow this step-by-step execution sequence:
+Use the same date range in `execution` for GOES, SONDA, and downstream steps.
 
-### 1. Collect GOES Satellite Data
-
-Download and process satellite imagery for your desired spectral channels. Ensure the same date range is used for every channel to allow for proper temporal joining.
-
-**Note:** Because this process is computationally intensive and time-consuming, it is recommended to run the collection in smaller chronological batches to eventually cover your full target period.
-
-* **Action:** Set general.start_date and general.end_date in config/pipeline.json.
-* **Execution:** 
+### 1. GOES satellite data
 
 ```bash
-# 1. GOES satellite data (by channel, date range)
 uv run python -m masters_project.pipeline.etl_goes_s3
 ```
 
-### 2. Collect SONDA Ground Data
-
-Fetch the ground-truth radiation measurements for the target station. Ensure the date range matches the total period defined during the GOES data collection (e.g., from 2022-01-01 to 2022-03-31) to ensure the datasets can be synchronized.
-
-* **Action:** Ensure the SONDA period in `config/pipeline.json` matches your GOES period.
-* **Execution:**
+### 2. SONDA ground data
 
 ```bash
-# Yearly downloads
+# Yearly ZIPs
 uv run python -m masters_project.pipeline.etl_sonda_by_year
 
-# OR Monthly downloads
+# Or monthly ZIPs
 uv run python -m masters_project.pipeline.etl_sonda_by_year_month
 ```
 
-### 3. Build Final Features
+### 3. Build merged model input
 
-Once data is collected, trigger the multi-stage merge to align all channels and ground data into a single ML-ready table.
-
-``` bash
-uv run python -m masters_project.pipeline.build_features
+```bash
+uv run python -m masters_project.pipeline.build_dataset
 ```
 
-Outputs are written under `data/`:
+### 4. Training and tuning (optional)
+
+```bash
+uv run python -m masters_project.pipeline.run_training
+uv run python -m masters_project.pipeline.run_tuning
+```
+
+## Outputs
+
+Under `data/`:
 
 - `data/raw/goes/` — GOES per-channel CSVs
-- `data/raw/sonda/` — SONDA CSVs
-- `data/processed/` — Final merged feature CSV
+- `data/raw/sonda/` — SONDA CSV
+- `data/processed/` — Merged model input CSV (`model_input_*.csv`)
+- `data/models/` — Saved joblib models
+- `data/results/` — Metrics and tuning JSON reports
 - `data/logs/` — Pipeline logs
 
 ## Project Structure
@@ -99,20 +92,16 @@ Outputs are written under `data/`:
 ```
 masters_project/
 ├── config/
-│   └── pipeline.json          # Pipeline configuration
+│   └── pipeline.json
 ├── src/masters_project/
-│   ├── clients/               # Data sources
-│   │   ├── goes_s3.py         # GOES S3 client
-│   │   └── sonda.py           # SONDA HTTP client
-│   ├── processors/            # Data processing
-│   │   ├── goes.py            # GOES NetCDF → DataFrame
-│   │   ├── merger.py          # GOES + SONDA merge
-│   │   └── sonda.py           # SONDA ZIP → DataFrame
-│   ├── loaders/               # Export (CSV, Parquet)
-│   ├── pipeline/              # ETL scripts
-│   ├── enums.py               # Station and channel enums
-│   ├── settings.py            # Config loader
-│   └── utils.py               # Date helpers, decorators
+│   ├── clients/          # GOES S3, SONDA HTTP
+│   ├── processors/       # GOES, SONDA, merger
+│   ├── loaders/          # CSV, Parquet, JSON exporters
+│   ├── models/           # ML base, factory, evaluate, tuning
+│   ├── pipeline/         # ETL, build_dataset, training, tuning
+│   ├── file_paths.py
+│   ├── settings.py
+│   └── utils.py
 └── tests/
 ```
 

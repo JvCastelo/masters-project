@@ -1,3 +1,5 @@
+"""SONDA ETL (monthly): download monthly ZIPs, export trimmed CSV."""
+
 import logging
 
 import pandas as pd

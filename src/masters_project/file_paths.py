@@ -4,10 +4,22 @@ from masters_project.settings import settings
 
 
 class FilePathBuilder:
-    """Centralized registry for generating standardized file paths across the project."""
+    """Build canonical paths for raw ETL outputs, model inputs, and ML artifacts.
+
+    Filenames embed execution dates and selected station from ``settings`` so runs are
+    traceable and non-colliding across configurations.
+    """
 
     @staticmethod
     def raw_goes(channel: str) -> Path:
+        """Path to the GOES CSV for ``channel`` under ``data/raw/goes``.
+
+        Args:
+            channel: ABI channel id (e.g. ``\"C01\"``).
+
+        Returns:
+            Full path: ``goes_{channel}_st_{start}_et_{end}_{station}.csv``.
+        """
         filename = (
             f"goes_{channel}_"
             f"st_{settings.execution.start_date}_"
@@ -18,6 +30,11 @@ class FilePathBuilder:
 
     @staticmethod
     def raw_sonda() -> Path:
+        """Path to the SONDA CSV under ``data/raw/sonda``.
+
+        Returns:
+            Full path: ``sonda_{data_type}_st_{start}_et_{end}_{station}.csv``.
+        """
         filename = (
             f"sonda_{settings.etl.sonda.data_type}_"
             f"st_{settings.execution.start_date}_"
@@ -28,6 +45,11 @@ class FilePathBuilder:
 
     @staticmethod
     def model_input() -> Path:
+        """Path to the merged feature table used as ML input under ``data/processed``.
+
+        Returns:
+            Full path: ``model_input_st_{start}_et_{end}_{station}.csv``.
+        """
         filename = (
             f"model_input_"
             f"st_{settings.execution.start_date}_"
@@ -38,6 +60,15 @@ class FilePathBuilder:
 
     @staticmethod
     def model_save(model_name: str, version: str = "v1") -> Path:
+        """Path for a trained model bundle (joblib) under ``data/models``.
+
+        Args:
+            model_name: Model identifier (e.g. ``\"KNN\"``); stored lowercased in filename.
+            version: Version tag suffix (default ``\"v1\"``).
+
+        Returns:
+            Path ending in ``.joblib``.
+        """
         filename = (
             f"{model_name.lower()}_"
             f"st_{settings.execution.start_date}_"
@@ -49,6 +80,15 @@ class FilePathBuilder:
 
     @staticmethod
     def model_metrics(model_name: str, version: str = "v1") -> Path:
+        """Path for evaluation metrics JSON under ``data/results``.
+
+        Args:
+            model_name: Model identifier; stored lowercased in filename.
+            version: Version tag suffix (default ``\"v1\"``).
+
+        Returns:
+            Path ending in ``_metrics.json``.
+        """
         filename = (
             f"{model_name.lower()}_"
             f"st_{settings.execution.start_date}_"
@@ -60,6 +100,15 @@ class FilePathBuilder:
 
     @staticmethod
     def model_tuning(model_name: str, version: str = "v1") -> Path:
+        """Path for hyperparameter tuning results JSON under ``data/results``.
+
+        Args:
+            model_name: Model identifier; stored lowercased in filename.
+            version: Version tag suffix (default ``\"v1\"``).
+
+        Returns:
+            Path ending in ``_tuning.json``.
+        """
         filename = (
             f"{model_name.lower()}_"
             f"st_{settings.execution.start_date}_"

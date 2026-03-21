@@ -11,16 +11,20 @@ logger = logging.getLogger(__name__)
 
 
 class BaseExporter(ABC):
-    """The absolute base class for exporting ANY type of data to disk."""
+    """Abstract base for exporting in-memory data to a file on disk.
+
+    Subclasses narrow ``data`` to a concrete type (DataFrame, dict, etc.). ``export``
+    uses ``Any`` here because each subclass accepts a different payload type.
+    """
 
     @abstractmethod
     def export(self, data: Any, destination: Path) -> None:
-        """All child classes MUST implement an export method."""
+        """Write ``data`` to ``destination`` using subclass-specific serialization."""
         pass
 
 
 class DataFrameExporter(BaseExporter):
-    """Base class strictly for tabular Pandas data (CSV, Parquet, etc.)."""
+    """Base class for tabular exports (CSV, Parquet, etc.)."""
 
     @measure_memory
     @time_track
@@ -42,14 +46,15 @@ class DataFrameExporter(BaseExporter):
 
     @abstractmethod
     def _save_to_disk(self, df: pd.DataFrame, destination: Path) -> None:
+        """Serialize ``df`` to ``destination`` (format-specific)."""
         pass
 
 
 class DictExporter(BaseExporter):
-    """Base class strictly for saving Python dictionaries (JSON, YAML, etc.)."""
+    """Base class for serializing mapping payloads (JSON, YAML, etc.)."""
 
     @time_track
-    def export(self, data: dict, destination: Path) -> None:
+    def export(self, data: dict[str, Any], destination: Path) -> None:
         if not data:
             logger.warning(
                 f"Attempted to export an empty dictionary to {destination.name}. Skipping."
@@ -66,5 +71,6 @@ class DictExporter(BaseExporter):
             raise
 
     @abstractmethod
-    def _save_to_disk(self, data: dict, destination: Path) -> None:
+    def _save_to_disk(self, data: dict[str, Any], destination: Path) -> None:
+        """Write ``data`` to ``destination`` (format-specific)."""
         pass

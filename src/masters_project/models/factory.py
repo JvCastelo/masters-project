@@ -9,9 +9,20 @@ logger = logging.getLogger(__name__)
 MODEL_REGISTRY = {"KNN": KNNModel, "XGBOOST": XGBoostModel}
 
 
-def build_model(model_name: str, **kwargs) -> BaseRadiationModel:
-    """
-    Dynamically instantiates a model based on its name and parameters.
+def build_model(model_name: str, **kwargs: object) -> BaseRadiationModel:
+    """Instantiate a radiation model class by registry name.
+
+    Names are matched case-insensitively against ``MODEL_REGISTRY`` keys.
+
+    Args:
+        model_name: Registry key (e.g. ``KNN``, ``XGBOOST``).
+        **kwargs: Constructor arguments passed to the model class.
+
+    Returns:
+        A concrete ``BaseRadiationModel`` instance.
+
+    Raises:
+        ValueError: If ``model_name`` does not match any registry entry.
     """
     name_upper = model_name.upper()
 

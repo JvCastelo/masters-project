@@ -1,3 +1,5 @@
+"""Train selected model on model input, save joblib bundle, evaluate on test set."""
+
 import logging
 
 from masters_project.file_paths import file_paths
@@ -13,7 +15,8 @@ settings.setup_logging("training_pipeline")
 logger = logging.getLogger(__name__)
 
 
-def main():
+def main() -> None:
+    """Fit model, persist to ``data/models``, run metrics, write JSON report."""
     logger.info("--- Starting ML Training Pipeline ---")
 
     model_name = settings.execution.selected_model

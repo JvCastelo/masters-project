@@ -2,15 +2,17 @@ import logging
 import threading
 import time
 import tracemalloc
+from collections.abc import Callable
 from datetime import date, datetime
 from functools import wraps
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 _memory_lock = threading.Lock()
 
 
-def time_track(func):
+def time_track(func: Callable[..., Any]) -> Callable[..., Any]:
     """Decorator that logs the elapsed time of the wrapped function.
 
     Args:
@@ -21,7 +23,7 @@ def time_track(func):
     """
 
     @wraps(func)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
         start_time = time.perf_counter()
 
         result = func(*args, **kwargs)
@@ -36,7 +38,7 @@ def time_track(func):
     return wrapper
 
 
-def measure_memory(func):
+def measure_memory(func: Callable[..., Any]) -> Callable[..., Any]:
     """Decorator that measures and logs peak/current memory usage of the wrapped function.
 
     Uses tracemalloc with a lock so only one traced call runs at a time.
@@ -49,7 +51,7 @@ def measure_memory(func):
     """
 
     @wraps(func)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
         with _memory_lock:
             if not tracemalloc.is_tracing():
                 tracemalloc.start()

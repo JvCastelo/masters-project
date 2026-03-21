@@ -1,4 +1,5 @@
 import logging
+from typing import BinaryIO
 
 import numpy as np
 import pandas as pd
@@ -11,11 +12,11 @@ class GoesProcessor:
     """Process GOES NetCDF: open as xarray, add channel/timestamp metadata, project lat/lon to indices, extract pixel windows."""
 
     @staticmethod
-    def open_as_dataset(file_obj) -> xr.Dataset:
+    def open_as_dataset(file_obj: BinaryIO) -> xr.Dataset:
         """Open a file-like object as an xarray Dataset using the h5netcdf engine.
 
         Args:
-            file_obj: File-like object (e.g. BytesIO) containing NetCDF bytes.
+            file_obj: Binary file-like object (e.g. BytesIO) containing NetCDF bytes.
 
         Returns:
             xarray Dataset for the GOES NetCDF.
