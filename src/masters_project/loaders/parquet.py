@@ -2,10 +2,10 @@ from pathlib import Path
 
 import pandas as pd
 
-from masters_project.loaders.base import DataExporter
+from masters_project.loaders.base import DataFrameExporter
 
 
-class ParquetExporter(DataExporter):
+class ParquetExporter(DataFrameExporter):
     """Exporter that writes DataFrames to Parquet files (no index)."""
 
     def _save_to_disk(self, df: pd.DataFrame, destination: Path) -> None:

@@ -3,6 +3,7 @@ import logging
 import pandas as pd
 
 from masters_project.clients.sonda import SondaClient
+from masters_project.file_paths import file_paths
 from masters_project.loaders.csv import CSVExporter
 from masters_project.processors.sonda import SondaProcessor
 from masters_project.settings import settings
@@ -69,13 +70,9 @@ def main() -> None:
         logger.info("Sorting chronological order...")
         df_sonda = df_sonda.sort_values(by="timestamp").reset_index(drop=True)
 
-        base_path = (
-            settings.RAW_PATH
-            / "sonda"
-            / f"sonda_{settings.etl.sonda.data_type}_st_{settings.execution.start_date}_et_{settings.execution.end_date}_{settings.execution.selected_station}.csv"
-        )
+        output_path = file_paths.raw_sonda()
 
-        CSVExporter().export(df_sonda, base_path)
+        CSVExporter().export(df_sonda, output_path)
 
     else:
         logger.error(

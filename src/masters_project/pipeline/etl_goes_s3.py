@@ -8,6 +8,7 @@ from tqdm import tqdm
 
 from masters_project.clients.goes_s3 import GoesS3Client
 from masters_project.enums import GoesChannelEnums
+from masters_project.file_paths import file_paths
 from masters_project.loaders.csv import CSVExporter
 from masters_project.processors.goes import GoesProcessor
 from masters_project.settings import settings
@@ -132,13 +133,9 @@ def main() -> None:
 
         df_goes = df_goes.sort_values(by="timestamp").reset_index(drop=True)
 
-        base_path = (
-            settings.RAW_PATH
-            / "goes"
-            / f"goes_{channel}_st_{settings.execution.start_date}_et_{settings.execution.end_date}_{settings.execution.selected_station}.csv"
-        )
+        output_path = file_paths.raw_goes(channel)
 
-        CSVExporter().export(df_goes, base_path)
+        CSVExporter().export(df_goes, output_path)
     else:
         logger.warning(
             f"No valid data was extracted for channel {channel}. Skipping export."

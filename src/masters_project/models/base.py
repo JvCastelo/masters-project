@@ -1,5 +1,6 @@
 import logging
 from abc import ABC
+from pathlib import Path
 
 import joblib
 from sklearn.preprocessing import StandardScaler
@@ -25,7 +26,7 @@ class BaseRadiationModel(ABC):
         X_new_scaled = self.scaler.transform(X_new)
         return self.model.predict(X_new_scaled)
 
-    def save(self, filepath: str):
+    def save(self, filepath: Path):
         joblib.dump(
             {"model": self.model, "scaler": self.scaler, "is_trained": self.is_trained},
             filepath,

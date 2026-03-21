@@ -54,7 +54,18 @@ class MlConfig(BaseModel):
     """Wrapper for all Machine Learning related configurations."""
 
     test_size: float
+    evaluation_metrics: list[str]
     models: dict[str, ModelSettings]
+
+
+class TuningConfig(BaseModel):
+    """Configuration for hyperparameter tuning execution."""
+
+    n_iter: int
+    cv: int
+    scoring: str
+    n_jobs: int = -1
+    verbose: int = 2
 
 
 class StationSettings(BaseModel):
@@ -70,6 +81,7 @@ class PipelineConfig(BaseModel):
     execution: ExecutionSettings
     etl_config: EtlConfig
     ml_config: MlConfig
+    tuning_config: TuningConfig
     stations: dict[str, StationSettings]
 
 
@@ -83,8 +95,8 @@ class Settings:
     LOG_PATH = DATA_PATH / "logs"
     RAW_PATH = DATA_PATH / "raw"
     PROCESSED_PATH = DATA_PATH / "processed"
-    MODELS_PATH = PROJECT_ROOT / "models"
-    RESULTS_PATH = PROJECT_ROOT / "results"
+    MODELS_PATH = DATA_PATH / "models"
+    RESULTS_PATH = DATA_PATH / "results"
 
     def __init__(self) -> None:
         """Load pipeline configuration from the configured JSON file."""
@@ -117,6 +129,10 @@ class Settings:
     @property
     def ml(self) -> MlConfig:
         return self._config.ml_config
+
+    @property
+    def tuning(self) -> TuningConfig:
+        return self._config.tuning_config
 
     @property
     def station(self) -> StationSettings:

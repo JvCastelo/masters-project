@@ -4,15 +4,16 @@ from collections import defaultdict
 import pandas as pd
 
 from masters_project.enums import GoesChannelEnums
+from masters_project.file_paths import file_paths
 from masters_project.loaders.csv import CSVExporter
 from masters_project.processors.merger import DatasetMerger
 from masters_project.settings import settings
 
-settings.setup_logging("building_features")
+settings.setup_logging("building_model_input")
 logger = logging.getLogger(__name__)
 
 
-def build_final_dataset() -> None:
+def build_model_input() -> None:
     """
     1. List all GOES files.
     2. Group and concat by row for each channel.
@@ -46,11 +47,7 @@ def build_final_dataset() -> None:
     logger.info("Joining all GOES channels into a single feature set.")
     df_goes_combined = DatasetMerger.join_by_columns(channel_dfs, time_col="timestamp")
 
-    sonda_path = (
-        settings.RAW_PATH
-        / "sonda"
-        / f"sonda_{settings.etl.sonda.data_type}_st_{settings.execution.start_date}_et_{settings.execution.end_date}_{settings.execution.selected_station}.csv"
-    )
+    sonda_path = file_paths.raw_sonda()
 
     if not sonda_path.exists():
         logger.error(f"SONDA file not found: {sonda_path}")
@@ -70,12 +67,10 @@ def build_final_dataset() -> None:
         f"Final dataset ready. Dropped {initial_len - len(df_final)} rows with NaNs."
     )
 
-    output_path = (
-        settings.PROCESSED_PATH
-        / f"final_features_st_{settings.execution.start_date}_et_{settings.execution.end_date}_{settings.execution.selected_station}.csv"
-    )
+    output_path = file_paths.model_input()
+
     CSVExporter().export(df_final, output_path)
 
 
 if __name__ == "__main__":
-    build_final_dataset()
+    build_model_input()
