@@ -76,6 +76,18 @@ uv run python -m masters_project.pipeline.run_training
 uv run python -m masters_project.pipeline.run_tuning
 ```
 
+### Recommended Execution Workflow
+
+To prevent memory overload and API timeouts, please follow this phased approach:
+
+1. **Phase 1: Partitioned GOES Extraction**
+   Do not run the GOES pipeline for the entire period at once. Edit your `pipeline.json` to download GOES data in smaller chunks (e.g., month by month).
+   Remember also that the data collection is per channel. 
+3. **Phase 2: Full Pipeline Configuration**
+   Only after all GOES data partitions are successfully downloaded, modify your `pipeline.json` to encompass the entire unified date range (e.g., `start_date: "2023-01-01"`, `end_date: "2023-12-31"`).
+4. **Phase 3: SONDA & ML Training**
+   With the full period configured, run the SONDA data extraction and the Machine Learning pipeline (`run_training.py` / `run_tuning.py`).
+
 ## Outputs
 
 Under `data/`:
