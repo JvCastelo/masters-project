@@ -1,8 +1,8 @@
 {
   "execution": {
-    "start_date": "2022-01-01",
-    "end_date": "2022-03-31",
-    "selected_station": "CACHOEIRA_PAULISTA",
+    "start_date": "2023-01-01",
+    "end_date": "2023-01-31",
+    "selected_station": "OURINHOS",
     "selected_model": "KNN",
     "max_workers": 15,
     "log_level": "INFO"
@@ -49,13 +49,17 @@
     "verbose": 2
   },
   "stations": {
-    "PETROLINA": {
-      "latitude": -9.069,
-      "longitude": -40.320
+    "SAO_MARTINHO_DA_SERRA": {
+      "latitude": -29.443,
+      "longitude": -53.823
     },
     "CACHOEIRA_PAULISTA": {
       "latitude": -22.690,
       "longitude": -45.006
+    },
+    "OURINHOS": {
+      "latitude": -23.000,
+      "longitude": -49.844
     }
   }
 }

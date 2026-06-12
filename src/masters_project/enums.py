@@ -23,7 +23,7 @@ class SondaStationEnums(StrEnum):
     PETROLINA = "PTR"
     SANTAREM = "STM"
     SAO_LUIZ = "SLZ"
-    SAO_MARTINHO = "SMS"
+    SAO_MARTINHO_DA_SERRA = "SMS"
     SOMBRIO = "SBR"
 
 
