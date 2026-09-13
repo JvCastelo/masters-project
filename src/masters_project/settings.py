@@ -68,6 +68,13 @@ class TuningConfig(BaseModel):
     verbose: int = 2
 
 
+class UploadConfig(BaseModel):
+    """Configuration for uploading raw GOES CSVs to a destination S3 bucket."""
+
+    bucket_name: str
+    source_dir: str | None = None
+
+
 class StationSettings(BaseModel):
     """Configuration for a single station's coordinates."""
 
@@ -82,6 +89,7 @@ class PipelineConfig(BaseModel):
     etl_config: EtlConfig
     ml_config: MlConfig
     tuning_config: TuningConfig
+    upload_config: UploadConfig
     stations: dict[str, StationSettings]
 
 
@@ -144,6 +152,11 @@ class Settings:
     def tuning(self) -> TuningConfig:
         """Hyperparameter search settings (RandomizedSearchCV-style)."""
         return self._config.tuning_config
+
+    @property
+    def upload(self) -> UploadConfig:
+        """S3 upload settings: destination bucket and optional source directory."""
+        return self._config.upload_config
 
     @property
     def station(self) -> StationSettings:
