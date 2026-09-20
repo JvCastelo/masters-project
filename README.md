@@ -41,6 +41,7 @@ Edit `config/pipeline.json` before running the pipeline.
 | `etl_config.sonda` | `data_type`, `target_variable` |
 | `ml_config` | `test_size`, `evaluation_metrics`, `models` (per-model hyperparameters, e.g. `KNN`, `XGBoost`) |
 | `tuning_config` | `n_iter`, `cv`, `scoring`, `n_jobs`, `verbose` |
+| `upload_config` | `bucket_name` (S3 destination), `source_dir` (`null` → `data/raw/goes`) |
 | `stations` | Object mapping station name to `{ "latitude", "longitude" }` |
 
 ## Running the Pipeline
@@ -75,6 +76,36 @@ uv run python -m masters_project.pipeline.build_dataset
 uv run python -m masters_project.pipeline.run_training
 uv run python -m masters_project.pipeline.run_tuning
 ```
+
+### 5. Upload raw GOES CSVs to S3 (optional)
+
+Uploads the GOES CSVs under partitioned keys (`estacao=/canal=/ano=/mes=/`), skipping
+objects that already exist in the bucket (idempotent — safe to re-run).
+
+```bash
+uv run python -m masters_project.pipeline.upload_goes_s3
+```
+
+Configure `upload_config` in `pipeline.json` (`bucket_name`; `source_dir` defaults to
+`data/raw/goes` when `null`).
+
+AWS credentials are resolved from the standard AWS chain. The recommended setup is
+`~/.aws/credentials` with a named profile, selected via `AWS_PROFILE`:
+
+```ini
+# ~/.aws/credentials
+[ppgem]
+aws_access_key_id = ...
+aws_secret_access_key = ...
+```
+
+```bash
+AWS_PROFILE=ppgem AWS_DEFAULT_REGION=us-east-1 \
+  uv run python -m masters_project.pipeline.upload_goes_s3
+```
+
+Do not hardcode credentials. If none are found (or they are invalid/expired), the run
+fails fast with a clear error explaining how to configure them.
 
 ### Recommended Execution Workflow
 
