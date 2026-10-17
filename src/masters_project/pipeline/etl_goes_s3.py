@@ -47,6 +47,9 @@ LISTING_WORKERS = 16
 # Tasks in flight per worker process: enough to keep workers busy without creating one
 # future per file of a whole year.
 IN_FLIGHT_PER_WORKER = 4
+# Recycle each worker process after this many files, as a second line of defence against
+# any slow memory growth over a very long collection.
+MAX_TASKS_PER_CHILD = 1000
 
 
 @dataclass
@@ -208,7 +211,9 @@ def collect(plans: list[ChannelPlan]) -> None:
             )
 
     workers = settings.etl.max_workers
-    with ProcessPoolExecutor(max_workers=workers) as pool:
+    with ProcessPoolExecutor(
+        max_workers=workers, max_tasks_per_child=MAX_TASKS_PER_CHILD
+    ) as pool:
         run_bounded(
             pool, iter_tasks(plans), on_result, window=workers * IN_FLIGHT_PER_WORKER
         )

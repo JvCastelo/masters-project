@@ -6,6 +6,7 @@ re-imports the function's module, and re-running the ETL module's top-level code
 would reconfigure logging and open S3 clients in every process.
 """
 
+import gc
 from dataclasses import dataclass
 
 import numpy as np
@@ -69,3 +70,10 @@ def extract_file(path: str, job: ExtractionJob) -> FileExtraction:
         return FileExtraction(source_key=path, timestamp=timestamp, windows=windows)
     except Exception as e:  # noqa: BLE001
         return FileExtraction(source_key=path, error=f"{type(e).__name__}: {e}")
+    finally:
+        # The fsspec block cache of the closed file sits in a reference cycle. Its blocks
+        # are big objects that barely move Python's allocation thresholds, so the automatic
+        # collector lets them pile up (~3.6 MB per file, measured), and 24 workers reading
+        # hundreds of thousands of files ran out of memory. Collecting after each file keeps
+        # a worker flat at ~165 MB.
+        gc.collect()
