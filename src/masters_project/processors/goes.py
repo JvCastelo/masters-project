@@ -1,6 +1,7 @@
 import logging
 from typing import BinaryIO
 
+import h5py
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -44,8 +45,7 @@ class GoesProcessor:
             channel = "UNK"
             logger.exception(f"Error catching channel name. Defaulting to {channel}")
 
-        time_str = ds.attrs.get("time_coverage_start")
-        timestamp = pd.to_datetime(time_str).round("10min").tz_convert("UTC")
+        timestamp = GoesProcessor.parse_timestamp(ds.attrs.get("time_coverage_start"))
         logger.debug(f"Computed timestamp: {timestamp}")
 
         ds.attrs["channel"] = channel
@@ -155,3 +155,131 @@ class GoesProcessor:
 
         logger.debug(f"Successfully created DataFrame with {len(cols)} window columns.")
         return df
+
+    @staticmethod
+    def window_columns(radius: int, channel: str) -> list[str]:
+        """Column names of a flattened (2*radius+1)^2 window: ``radius={r}_{channel}_{row}{col}``.
+
+        Args:
+            radius: Half-width of the square window in pixels.
+            channel: ABI channel id (e.g. 'C03').
+
+        Returns:
+            Column names in the same order as the flattened window values.
+        """
+        dim = 2 * radius + 1
+        return [
+            f"radius={radius}_{channel}_{idx // dim + 1}{idx % dim + 1}"
+            for idx in range(dim * dim)
+        ]
+
+    @staticmethod
+    def extract_windows(
+        ds: xr.Dataset,
+        variable: str,
+        radius: int,
+        pixels: dict[str, tuple[int, int]],
+    ) -> dict[str, np.ndarray]:
+        """Extract the flattened pixel window of ``variable`` for several stations at once.
+
+        Reads each station's window from the same open dataset, so the cost of opening
+        the file (the expensive part over S3) is paid once for all stations.
+
+        Args:
+            ds: GOES Dataset containing ``variable`` with y/x dimensions.
+            variable: Name of the data variable to extract (e.g. 'Rad').
+            radius: Half-width of the square window in pixels.
+            pixels: Mapping station name -> (i, j) target pixel indices.
+
+        Returns:
+            Mapping station name -> 1-D array with (2*radius+1)^2 values.
+        """
+        windows = {}
+        for station, (i_center, j_center) in pixels.items():
+            i_slice = slice(max(i_center - radius, 0), i_center + radius + 1)
+            j_slice = slice(max(j_center - radius, 0), j_center + radius + 1)
+            windows[station] = ds[variable].isel(y=i_slice, x=j_slice).values.flatten()
+        return windows
+
+    @staticmethod
+    def parse_timestamp(time_str: str | bytes) -> pd.Timestamp:
+        """Parse ``time_coverage_start`` into a UTC timestamp rounded to 10 minutes.
+
+        Args:
+            time_str: ISO-8601 string (or bytes, as returned by h5py) such as
+                '2022-02-01T00:00:20.6Z'.
+
+        Returns:
+            Timezone-aware UTC timestamp rounded to the nearest 10 minutes.
+        """
+        if isinstance(time_str, bytes):
+            time_str = time_str.decode()
+        return pd.to_datetime(time_str).round("10min").tz_convert("UTC")
+
+    @staticmethod
+    def read_windows_h5(
+        file_obj: BinaryIO,
+        variable: str,
+        radius: int,
+        pixels: dict[str, tuple[int, int]],
+    ) -> tuple[pd.Timestamp, dict[str, np.ndarray]]:
+        """Read only the pixel windows of ``variable`` straight from the HDF5 file.
+
+        Skips xarray, which parses the metadata of every variable in the file (more
+        requests and CPU per file over S3). Applies the CF packing the same way xarray
+        does: ``_FillValue`` becomes NaN, then ``value * scale_factor + add_offset`` in
+        the attribute's dtype, so the values are identical to the xarray path.
+
+        Args:
+            file_obj: Seekable binary file (e.g. an s3fs file opened with a block cache).
+            variable: Name of the data variable to read (e.g. 'Rad').
+            radius: Half-width of the square window in pixels.
+            pixels: Mapping station name -> (i, j) target pixel indices.
+
+        Returns:
+            (timestamp, windows): the file's rounded UTC timestamp and a mapping
+            station name -> 1-D array with (2*radius+1)^2 values.
+        """
+        with h5py.File(file_obj, "r") as h5:
+            data = h5[variable]
+            scale = _scalar_attr(data, "scale_factor")
+            offset = _scalar_attr(data, "add_offset")
+            fill = _scalar_attr(data, "_FillValue")
+
+            windows = {}
+            for station, (i_center, j_center) in pixels.items():
+                i_slice = slice(max(i_center - radius, 0), i_center + radius + 1)
+                j_slice = slice(max(j_center - radius, 0), j_center + radius + 1)
+                raw = data[i_slice, j_slice].flatten()
+                windows[station] = _decode_packed(raw, scale, offset, fill)
+
+            timestamp = GoesProcessor.parse_timestamp(h5.attrs["time_coverage_start"])
+
+        return timestamp, windows
+
+
+def _scalar_attr(data: h5py.Dataset, name: str) -> np.generic | None:
+    """Return an HDF5 attribute as a numpy scalar (they are stored as 1-element arrays)."""
+    if name not in data.attrs:
+        return None
+    return np.ravel(data.attrs[name])[0]
+
+
+def _decode_packed(
+    raw: np.ndarray,
+    scale: np.generic | None,
+    offset: np.generic | None,
+    fill: np.generic | None,
+) -> np.ndarray:
+    """Undo CF packing: mask the fill value, then apply ``scale_factor`` and ``add_offset``."""
+    if scale is None and offset is None and fill is None:
+        return raw
+
+    values = raw.astype(np.float32)
+    if fill is not None:
+        values[raw == fill] = np.nan
+    if scale is not None:
+        values = values * scale
+    if offset is not None:
+        values = values + offset
+    return values

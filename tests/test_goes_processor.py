@@ -159,3 +159,71 @@ def test_extract_window_to_df_missing_target_indices_raises_valueerror() -> None
     )
     with pytest.raises(ValueError, match="target_pixel_i and target_pixel_j"):
         GoesProcessor.extract_window_to_df(ds, variable="Rad", radius=1)
+
+
+# =============================================================================
+# read_windows_h5: direct HDF5 reader must match the xarray path exactly
+# =============================================================================
+
+
+@pytest.fixture
+def packed_netcdf(tmp_path):
+    """A NetCDF4 file packed like GOES Rad: int16, scale_factor/add_offset float32, _FillValue."""
+    rng = np.random.default_rng(0)
+    raw = rng.integers(0, 1022, size=(20, 20)).astype(np.int16)
+    raw[5, 5] = 1023  # fill value
+    ds = xr.Dataset(
+        {"Rad": (["y", "x"], raw.astype(np.float32) * 0.37691253 - 12.037643)},
+        coords={"y": np.arange(20.0), "x": np.arange(20.0)},
+        attrs={"time_coverage_start": "2022-02-01T00:04:27.6Z"},
+    )
+    path = tmp_path / "goes_like.nc"
+    ds.to_netcdf(
+        path,
+        engine="h5netcdf",
+        encoding={
+            "Rad": {
+                "dtype": "int16",
+                "scale_factor": np.float32(0.37691253),
+                "add_offset": np.float32(-12.037643),
+                "_FillValue": np.int16(1023),
+                "chunksizes": (8, 8),
+            }
+        },
+    )
+    # Re-encode the fill pixel explicitly: write raw ints through h5py to be exact.
+    import h5py
+
+    with h5py.File(path, "r+") as h5:
+        h5["Rad"][...] = raw
+    return path
+
+
+def test_read_windows_h5_matches_xarray_including_fill_values(packed_netcdf) -> None:
+    pixels = {"A": (5, 5), "B": (10, 3), "EDGE": (0, 19)}
+    radius = 1
+
+    with open(packed_netcdf, "rb") as f:
+        timestamp, windows = GoesProcessor.read_windows_h5(f, "Rad", radius, pixels)
+
+    with xr.open_dataset(packed_netcdf, engine="h5netcdf") as ds:
+        for name, (i, j) in pixels.items():
+            expected = (
+                ds["Rad"]
+                .isel(
+                    y=slice(max(i - radius, 0), i + radius + 1),
+                    x=slice(max(j - radius, 0), j + radius + 1),
+                )
+                .values.flatten()
+            )
+            assert windows[name].dtype == expected.dtype == np.float32
+            np.testing.assert_array_equal(windows[name], expected)
+
+    assert np.isnan(windows["A"][4])  # center pixel (5, 5) is the fill value
+    assert timestamp == pd.Timestamp("2022-02-01 00:00:00", tz="UTC")
+
+
+def test_parse_timestamp_accepts_bytes_and_rounds_to_ten_minutes() -> None:
+    assert GoesProcessor.parse_timestamp(b"2022-02-01T00:09:51.4Z") == pd.Timestamp(
+        "2022-02-01 00:10:00", tz="UTC"
+    )

@@ -4,7 +4,12 @@ from datetime import date
 
 import pytest
 
-from masters_project.utils import get_target_years, get_target_year_months
+from masters_project.utils import (
+    format_period,
+    get_target_periods,
+    get_target_year_months,
+    get_target_years,
+)
 
 
 # =============================================================================
@@ -83,3 +88,31 @@ def test_get_target_years_invalid_date_string_raises_valueerror() -> None:
     """Failure mode: malformed date string causes datetime.strptime to raise ValueError."""
     with pytest.raises(ValueError):
         get_target_years("2023-13-01", "2024-01-01")  # month 13 invalid
+
+
+def test_get_target_periods_year_returns_one_period_per_calendar_year() -> None:
+    assert get_target_periods("2022-11-15", "2023-02-01", "year") == [
+        (2022, None),
+        (2023, None),
+    ]
+
+
+def test_get_target_periods_month_returns_one_period_per_month() -> None:
+    assert get_target_periods("2022-12-20", "2023-01-05", "month") == [
+        (2022, 12),
+        (2023, 1),
+    ]
+
+
+def test_get_target_periods_invalid_granularity_raises_valueerror() -> None:
+    with pytest.raises(ValueError, match="granularity"):
+        get_target_periods("2022-01-01", "2022-01-31", "week")
+
+
+@pytest.mark.parametrize(
+    ("period", "expected"), [((2023, None), "2023"), ((2023, 6), "2023-06")]
+)
+def test_format_period_year_and_month(
+    period: tuple[int, int | None], expected: str
+) -> None:
+    assert format_period(period) == expected

@@ -1,6 +1,8 @@
 import logging
 import shutil
 import zipfile
+from collections.abc import Iterable
+from datetime import date
 from pathlib import Path
 
 import pandas as pd
@@ -122,3 +124,56 @@ class SondaProcessor:
         df["timestamp"] = df["timestamp"].dt.tz_localize("UTC")
 
         return df
+
+    @staticmethod
+    def trim_to_period(
+        df: pd.DataFrame, start_date: str, end_date: str
+    ) -> pd.DataFrame:
+        """Keep rows from ``start_date`` 00:00 to ``end_date`` 23:59:59 (UTC), sorted by time.
+
+        Args:
+            df: DataFrame with a UTC-aware ``timestamp`` column.
+            start_date: First day, 'YYYY-MM-DD'.
+            end_date: Last day (inclusive), 'YYYY-MM-DD'.
+
+        Returns:
+            The trimmed, chronologically sorted DataFrame with a fresh index.
+        """
+        start_bound = pd.to_datetime(start_date).tz_localize("UTC")
+        end_bound = pd.to_datetime(end_date).tz_localize("UTC") + pd.Timedelta(
+            days=1, seconds=-1
+        )
+        trimmed = df[(df["timestamp"] >= start_bound) & (df["timestamp"] <= end_bound)]
+        return trimmed.sort_values(by="timestamp").reset_index(drop=True)
+
+    @staticmethod
+    def coverage_days(df: pd.DataFrame, target_variable: str) -> tuple[int, int]:
+        """Count the days that have at least one valid target value.
+
+        Returns:
+            (days with some valid value, days present in the frame).
+        """
+        days = df["timestamp"].dt.date
+        return int(days[df[target_variable].notna()].nunique()), int(days.nunique())
+
+    @staticmethod
+    def days_with_target(csv_paths: Iterable[Path], target_variable: str) -> set[date]:
+        """Days (UTC) on which at least one of the SONDA CSVs has a valid target value.
+
+        Used to skip GOES days whose rows would be dropped by the join with the target.
+
+        Args:
+            csv_paths: SONDA CSVs written by the SONDA ETL (``timestamp`` + target column).
+            target_variable: Name of the target column (e.g. 'glo_avg').
+
+        Returns:
+            Set of dates with a non-null target in any of the files.
+        """
+        days: set[date] = set()
+        for path in csv_paths:
+            df = pd.read_csv(path, usecols=["timestamp", target_variable])
+            valid = pd.to_datetime(
+                df.loc[df[target_variable].notna(), "timestamp"], utc=True
+            )
+            days.update(valid.dt.date)
+        return days

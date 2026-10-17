@@ -1,20 +1,13 @@
 import json
 import logging
+import os
 import sys
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ValidationError, field_validator, model_validator
 
-
-class ExecutionSettings(BaseModel):
-    """Pipeline execution controls (dates, selections, resources)."""
-
-    start_date: str
-    end_date: str
-    selected_station: str
-    selected_model: str
-    max_workers: int = 10
-    log_level: str = "INFO"
+from masters_project.enums import GoesChannelEnums
 
 
 class GoesConfig(BaseModel):
@@ -23,8 +16,19 @@ class GoesConfig(BaseModel):
     bucket_name: str
     product_name: str
     variable: str
-    selected_channel: str
+    channels: list[str]
     pixel_radius: int
+    skip_days_without_target: bool = True
+
+    @field_validator("channels")
+    @classmethod
+    def _channels_are_valid_abi_channels(cls, channels: list[str]) -> list[str]:
+        if not channels:
+            raise ValueError("goes.channels must list at least one channel.")
+        invalid = [c for c in channels if c not in GoesChannelEnums.__members__]
+        if invalid:
+            raise ValueError(f"Unknown GOES channels: {invalid}. Use C01 to C16.")
+        return channels
 
 
 class SondaConfig(BaseModel):
@@ -34,9 +38,24 @@ class SondaConfig(BaseModel):
     target_variable: str
 
 
-class EtlConfig(BaseModel):
-    """Wrapper for all ETL related configurations."""
+class StationSettings(BaseModel):
+    """Configuration for a single station's coordinates."""
 
+    latitude: float
+    longitude: float
+
+
+class EtlConfig(BaseModel):
+    """ETL configuration: period, resources, stations, and the GOES/SONDA sources.
+
+    Every station in ``stations`` is processed by each pipeline step.
+    """
+
+    start_date: str
+    end_date: str
+    max_workers: int = 12
+    log_level: str = "INFO"
+    stations: dict[str, StationSettings]
     goes: GoesConfig
     sonda: SondaConfig
 
@@ -51,11 +70,20 @@ class ModelSettings(BaseModel):
 
 
 class MlConfig(BaseModel):
-    """Wrapper for all Machine Learning related configurations."""
+    """Machine learning configuration, including which model the pipelines run."""
 
+    selected_model: str
     test_size: float
     evaluation_metrics: list[str]
     models: dict[str, ModelSettings]
+
+    @model_validator(mode="after")
+    def _selected_model_is_configured(self) -> "MlConfig":
+        if self.selected_model not in self.models:
+            raise ValueError(
+                f"Selected model '{self.selected_model}' is not in your models list."
+            )
+        return self
 
 
 class TuningConfig(BaseModel):
@@ -68,21 +96,12 @@ class TuningConfig(BaseModel):
     verbose: int = 2
 
 
-class StationSettings(BaseModel):
-    """Configuration for a single station's coordinates."""
-
-    latitude: float
-    longitude: float
-
-
 class PipelineConfig(BaseModel):
     """Root configuration model containing all sub-configurations."""
 
-    execution: ExecutionSettings
     etl_config: EtlConfig
     ml_config: MlConfig
     tuning_config: TuningConfig
-    stations: dict[str, StationSettings]
 
 
 class Settings:
@@ -90,13 +109,20 @@ class Settings:
 
     PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-    PIPELINE_CONFIG_FILE = PROJECT_ROOT / "config" / "pipeline.json"
+    # ``MASTERS_PIPELINE_CONFIG`` points the pipeline at another config file, so a run can use
+    # different dates/stations/channels without editing ``config/pipeline.json``.
+    PIPELINE_CONFIG_FILE = Path(
+        os.environ.get(
+            "MASTERS_PIPELINE_CONFIG", PROJECT_ROOT / "config" / "pipeline.json"
+        )
+    )
     DATA_PATH = PROJECT_ROOT / "data"
     LOG_PATH = DATA_PATH / "logs"
     RAW_PATH = DATA_PATH / "raw"
     PROCESSED_PATH = DATA_PATH / "processed"
     MODELS_PATH = DATA_PATH / "models"
     RESULTS_PATH = DATA_PATH / "results"
+    CACHE_PATH = DATA_PATH / "cache"
 
     def __init__(self) -> None:
         """Load pipeline configuration from the configured JSON file."""
@@ -126,18 +152,13 @@ class Settings:
             sys.exit(1)
 
     @property
-    def execution(self) -> ExecutionSettings:
-        """Execution-wide settings: dates, selected station/model, workers, log level."""
-        return self._config.execution
-
-    @property
     def etl(self) -> EtlConfig:
-        """ETL configuration for GOES and SONDA (products, channels, target variable)."""
+        """ETL configuration: period, workers, stations, GOES and SONDA sources."""
         return self._config.etl_config
 
     @property
     def ml(self) -> MlConfig:
-        """Machine learning configuration: test split, metrics, and per-model hyperparameters."""
+        """Machine learning configuration: selected model, test split, metrics, hyperparameters."""
         return self._config.ml_config
 
     @property
@@ -146,35 +167,22 @@ class Settings:
         return self._config.tuning_config
 
     @property
-    def station(self) -> StationSettings:
-        """Coordinates for ``execution.selected_station`` from the ``stations`` map.
-
-        Raises:
-            ValueError: If the selected station key is not present in ``stations``.
-        """
-        target_name = self.execution.selected_station
-        if target_name not in self._config.stations:
-            raise ValueError(
-                f"Selected station '{target_name}' is not in your stations list."
-            )
-        return self._config.stations[target_name]
+    def stations(self) -> dict[str, StationSettings]:
+        """All configured stations (name -> coordinates); every pipeline step runs for each."""
+        return self.etl.stations
 
     @property
     def model(self) -> ModelSettings:
-        """Hyperparameters for ``execution.selected_model`` from ``ml_config.models``.
-
-        Raises:
-            ValueError: If the selected model key is not present in ``models``.
-        """
-        target_name = self.execution.selected_model
-        if target_name not in self.ml.models:
-            raise ValueError(
-                f"Selected model '{target_name}' is not in your models list."
-            )
-        return self.ml.models[target_name]
+        """Hyperparameters for ``ml_config.selected_model`` from ``ml_config.models``."""
+        return self.ml.models[self.ml.selected_model]
 
     def setup_logging(self, log_name: str) -> None:
-        """Configure root logger with console and file handlers."""
+        """Configure root logger with console and rotating file handlers.
+
+        The console shows ``etl_config.log_level``. The file keeps INFO and above (DEBUG
+        only if ``log_level`` is DEBUG) and rotates at 10 MB, keeping 5 backups, so a long
+        run cannot fill the disk.
+        """
         self.LOG_PATH.mkdir(parents=True, exist_ok=True)
 
         formatter = logging.Formatter(
@@ -182,12 +190,16 @@ class Settings:
         )
 
         console_handler = logging.StreamHandler(sys.stdout)
-        console_handler.setLevel(self.execution.log_level)
+        console_handler.setLevel(self.etl.log_level)
         console_handler.setFormatter(formatter)
 
         file_path = self.LOG_PATH / f"{log_name}.log"
-        file_handler = logging.FileHandler(file_path, mode="a")
-        file_handler.setLevel(logging.DEBUG)
+        file_handler = RotatingFileHandler(
+            file_path, maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8"
+        )
+        file_handler.setLevel(
+            logging.DEBUG if self.etl.log_level.upper() == "DEBUG" else logging.INFO
+        )
         file_handler.setFormatter(formatter)
 
         root_logger = logging.getLogger()
@@ -204,6 +216,8 @@ class Settings:
         logging.getLogger("s3fs").setLevel(logging.WARNING)
         logging.getLogger("h5netcdf").setLevel(logging.WARNING)
         logging.getLogger("fsspec").setLevel(logging.WARNING)
+        logging.getLogger("httpx").setLevel(logging.WARNING)
+        logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 
 settings = Settings()

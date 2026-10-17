@@ -40,7 +40,7 @@ df_input_test = pd.read_csv(
 df_input_test["timestamp"] = pd.to_datetime(df_input_test["timestamp"])
 
 target_col = "glo_avg"
-model_name = settings.execution.selected_model
+model_name = settings.ml.selected_model
 df_final = pd.DataFrame()
 
 # %%

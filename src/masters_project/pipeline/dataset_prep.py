@@ -11,9 +11,9 @@ from masters_project.settings import settings
 logger = logging.getLogger(__name__)
 
 
-def load_model_input_data() -> pd.DataFrame:
-    """Load ``model_input`` CSV from disk and sort by ``timestamp``."""
-    data_path = file_paths.model_input()
+def load_model_input_data(station: str) -> pd.DataFrame:
+    """Load ``station``'s ``model_input`` CSV from disk and sort by ``timestamp``."""
+    data_path = file_paths.model_input(station)
     logger.info(f"Loading data from {data_path}")
 
     df = pd.read_csv(data_path, parse_dates=["timestamp"])
