@@ -99,3 +99,37 @@ def test_prepare_dataframes_invalid_time_raises_error():
 
     with pytest.raises(Exception):
         DatasetMerger.concat_by_rows([df_bad], time_col="timestamp")
+
+
+# =============================================================================
+# Tests: repeated timestamps (overlapping windows)
+# =============================================================================
+
+
+def test_concat_by_rows_overlapping_files_keeps_one_row_per_timestamp(df_day_1):
+    overlap = df_day_1.copy()
+    overlap["val"] = [11, 21]  # re-run of the same window
+
+    result = DatasetMerger.concat_by_rows([df_day_1, overlap])
+
+    assert len(result) == 2
+    assert result["val"].tolist() == [11, 21]  # the later file wins
+
+
+def test_join_by_columns_does_not_multiply_rows_on_repeated_timestamps():
+    ts = ["2024-01-01 12:00:00", "2024-01-01 13:00:00"]
+    left = pd.DataFrame({"timestamp": ts + ts[1:], "a": [1, 2, 2]})
+    right = pd.DataFrame({"timestamp": ts + ts[1:], "b": [3, 4, 4]})
+
+    result = DatasetMerger.join_by_columns([left, right])
+
+    assert len(result) == 2
+    assert result["timestamp"].is_unique
+
+
+def test_overlapping_channel_stacks_join_to_original_row_count(df_day_1):
+    """Regression: 2 overlapping stacks per channel used to turn 2 rows into 4+."""
+    c1 = DatasetMerger.concat_by_rows([df_day_1, df_day_1])
+    c2 = DatasetMerger.concat_by_rows([df_day_1.rename(columns={"val": "v2"})] * 2)
+
+    assert len(DatasetMerger.join_by_columns([c1, c2])) == len(df_day_1)

@@ -10,6 +10,22 @@ class DatasetMerger:
     """General utility to merge and concat GOES and SONDA dataframes."""
 
     @staticmethod
+    def _drop_duplicate_times(df: pd.DataFrame, time_col: str) -> pd.DataFrame:
+        """Keep one row per timestamp (the last one), warning about what was dropped.
+
+        Repeated timestamps appear when stacked files overlap (e.g. a January-March run
+        followed by a February run). Left in place they would turn the later joins into a
+        per-timestamp cartesian product, silently multiplying rows.
+        """
+        duplicated = df[time_col].duplicated(keep="last")
+        if duplicated.any():
+            logger.warning(
+                f"Dropping {int(duplicated.sum())} rows with repeated '{time_col}' values."
+            )
+            df = df[~duplicated]
+        return df
+
+    @staticmethod
     def _prepare_dataframes(
         dataframes: list[pd.DataFrame], time_col: str
     ) -> list[pd.DataFrame]:
@@ -37,7 +53,10 @@ class DatasetMerger:
         Use this to combine different sensors (e.g., Satellite + Ground Station).
         """
         logger.info(f"Joining {len(dataframes)} datasets on '{time_col}' ({how} join).")
-        prepared = cls._prepare_dataframes(dataframes, time_col)
+        prepared = [
+            cls._drop_duplicate_times(df, time_col)
+            for df in cls._prepare_dataframes(dataframes, time_col)
+        ]
 
         df_merged = reduce(
             lambda left, right: pd.merge(left, right, on=time_col, how=how), prepared
@@ -60,5 +79,6 @@ class DatasetMerger:
         prepared = cls._prepare_dataframes(dataframes, time_col)
 
         df_stacked = pd.concat(prepared, axis=0, ignore_index=True)
+        df_stacked = cls._drop_duplicate_times(df_stacked, time_col)
 
         return df_stacked.sort_values(time_col).reset_index(drop=True)
