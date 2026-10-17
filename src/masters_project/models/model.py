@@ -16,11 +16,13 @@ class KNNModel(BaseRadiationModel):
 class XGBoostModel(BaseRadiationModel):
     """Gradient boosted trees (XGBoost) regressor for radiation prediction."""
 
-    def __init__(self, n_estimators: int = 100, learning_rate: float = 0.1) -> None:
+    def __init__(
+        self, n_estimators: int = 100, learning_rate: float = 0.1, n_jobs: int = -1
+    ) -> None:
         super().__init__()
         self.model = XGBRegressor(
             n_estimators=n_estimators,
             learning_rate=learning_rate,
             random_state=42,
-            n_jobs=-1,
+            n_jobs=n_jobs,
         )

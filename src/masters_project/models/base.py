@@ -55,8 +55,10 @@ class BaseRadiationModel(ABC):
         """Persist model, scaler, and training flag with joblib.
 
         Args:
-            filepath: Destination path for the serialized bundle.
+            filepath: Destination path for the serialized bundle. Missing parent
+                directories are created.
         """
+        filepath.parent.mkdir(parents=True, exist_ok=True)
         joblib.dump(
             {"model": self.model, "scaler": self.scaler, "is_trained": self.is_trained},
             filepath,
