@@ -103,6 +103,8 @@ for ax, metric in zip(axes, metrics.columns):
     ax.bar_label(bars, fmt="%.3f", padding=3)
     ax.set_title(metric.upper())
     ax.tick_params(axis="x", rotation=30)
+    for label in ax.get_xticklabels():
+        label.set_horizontalalignment("right")
 plt.tight_layout()
 plt.savefig(
     figures
