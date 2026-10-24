@@ -248,3 +248,19 @@ def test_predict_config_is_optional_in_ml_config() -> None:
         models={"KNN": {}},
     )
     assert config.predict is None and config.train is None
+
+
+def test_the_experiment_config_of_the_project_loads_and_is_consistent() -> None:
+    """The versioned experiment must stay valid as the settings models evolve."""
+    import json
+    from pathlib import Path
+
+    from masters_project.settings import PipelineConfig
+
+    path = settings.PROJECT_ROOT / "config" / "experiments" / "ourinhos-2023.json"
+    config = PipelineConfig(**json.loads(Path(path).read_text()))
+
+    assert config.ml_config.train.end_date < config.ml_config.predict.start_date
+    assert config.ml_config.predict.target_station in config.etl_config.stations
+    assert set(config.ml_config.predict.models) <= set(config.etl_config.stations)
+    assert config.etl_config.filters.min_solar_elevation == 5

@@ -1,210 +1,113 @@
 # %%
-import os
+"""Plots of an experiment run by ``python -m masters_project.ml.predict``.
 
-import joblib
+The notebook only reads what ``ml.predict`` wrote (predictions and metrics); it computes
+nothing itself. Start the kernel with the same config as the run, for example
+``MASTERS_PIPELINE_CONFIG=config/experiments/ourinhos-2023.json``.
+"""
+
+import json
+
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 import seaborn as sns
-from geopy.distance import geodesic
-from sklearn.metrics import (
-    mean_absolute_error,
-    mean_absolute_percentage_error,
-    r2_score,
-    root_mean_squared_error,
-)
 
+from masters_project.file_paths import file_paths
 from masters_project.settings import settings
 
-os.chdir("..")
-print("Current Working Directory: ", os.getcwd())
 sns.set_theme(style="whitegrid")
 
-# Models, test data and outputs of this notebook are samples (trained on January only):
-# they live under data/samples, in the same station/stage layout as data/.
-SAMPLES = "data/samples"
-
 # %%
-model_cachoeira_paulista = joblib.load(
-    f"{SAMPLES}/models/cachoeira_paulista/knn_st_2022-01-01_et_2022-01-31_CACHOEIRA_PAULISTA_v1.joblib"
+predict = settings.ml.predict
+if predict is None:
+    raise SystemExit(
+        "ml_config.predict is not configured: start the kernel with the experiment's config."
+    )
+
+model_name = predict.model_name or settings.ml.selected_model
+run = (predict.target_station, model_name, predict.start_date, predict.end_date)
+
+predictions_path = file_paths.predictions(*run)
+report_path = file_paths.predictions_report(*run)
+figures = predictions_path.parent
+
+predictions = pd.read_csv(predictions_path, parse_dates=["timestamp"])
+report = json.loads(report_path.read_text())
+columns = [c for c in predictions.columns if c not in ("timestamp", "y_true")]
+
+print(
+    f"{predict.target_station} {predict.start_date}..{predict.end_date}: {len(predictions)} rows"
 )
-model_ourinhos = joblib.load(
-    f"{SAMPLES}/models/ourinhos/knn_st_2022-01-01_et_2022-01-31_OURINHOS_v1.joblib"
-)
-model_sao_martinho_da_serra = joblib.load(
-    f"{SAMPLES}/models/sao_martinho_da_serra/knn_st_2022-01-01_et_2022-01-31_SAO_MARTINHO_DA_SERRA_v1.joblib"
-)
+print("models and ensembles:", columns)
+print("revision:", report["git_revision"], "| created:", report["created_at"])
 
 # %%
-df_input_test = pd.read_csv(
-    f"{SAMPLES}/processed/ourinhos/model_test_st_2023-01-01_et_2023-01-31_OURINHOS.csv"
-)
-
-# Convert timestamp just to be safe for plotting
-df_input_test["timestamp"] = pd.to_datetime(df_input_test["timestamp"])
-
-target_col = "glo_avg"
-model_name = settings.ml.selected_model
-df_final = pd.DataFrame()
+# Metrics of every model and ensemble, side by side.
+metrics = pd.DataFrame(report["metrics"]).T
+metrics
 
 # %%
-X_input_test = df_input_test.copy().drop(columns=[target_col, "timestamp"])
-
-# %%
-loc_cachoeira_paulista = (-22.690, -45.006)  # usar settings depois
-loc_ourinhos = (-23.000, -49.844)
-loc_sao_martinho_da_serra = (-29.443, -53.823)
-
-# FIX 1: Extract the numerical value (.km) from the geodesic object
-distance_our_cp = geodesic(loc_ourinhos, loc_cachoeira_paulista).km
-distance_our_sms = geodesic(loc_ourinhos, loc_sao_martinho_da_serra).km
-
-# FIX 2: Swap the numerators for inverse distance weighting (closer = higher weight)
-total_distance = distance_our_cp + distance_our_sms
-weight_our_cp = distance_our_sms / total_distance
-weight_our_sms = distance_our_cp / total_distance
-
-# %%
-df_final["timestamp"] = df_input_test["timestamp"]
-df_final["y_true"] = df_input_test[target_col]
-
-# 1. Cachoeira Paulista
-scaler_CP = model_cachoeira_paulista["scaler"]
-# Reordena o X_input_test para bater exatamente com o que o modelo CP espera
-X_input_CP = X_input_test[scaler_CP.feature_names_in_]
-X_test_scaled_CP = scaler_CP.transform(X_input_CP)
-df_final["y_pred_CP"] = model_cachoeira_paulista["model"].predict(X_test_scaled_CP)
-
-# 2. Ourinhos
-scaler_OUR = model_ourinhos["scaler"]
-# Reordena o X_input_test para bater com o modelo OUR
-X_input_OUR = X_input_test[scaler_OUR.feature_names_in_]
-X_test_scaled_OUR = scaler_OUR.transform(X_input_OUR)
-df_final["y_pred_OUR"] = model_ourinhos["model"].predict(X_test_scaled_OUR)
-
-# 3. São Martinho da Serra
-scaler_SMS = model_sao_martinho_da_serra["scaler"]
-# Reordena o X_input_test para bater com o modelo SMS
-X_input_SMS = X_input_test[scaler_SMS.feature_names_in_]
-X_test_scaled_SMS = scaler_SMS.transform(X_input_SMS)
-df_final["y_pred_SMS"] = model_sao_martinho_da_serra["model"].predict(X_test_scaled_SMS)
-
-# 4. Calcular a predição ponderada (IDW)
-df_final["y_pred_weight_CP_SMS"] = (
-    weight_our_cp * df_final["y_pred_CP"] + weight_our_sms * df_final["y_pred_SMS"]
-)
-
-
-# %%
-def calcular_metricas(y_true, y_pred, nome_modelo):
-    mae = mean_absolute_error(y_true, y_pred)
-    rmse = root_mean_squared_error(y_true, y_pred)
-    r2 = r2_score(y_true, y_pred)
-    mask = y_true > 0  # Filter out nighttime/zero irradiance
-    if mask.sum() > 0:
-        mape = mean_absolute_percentage_error(y_true[mask], y_pred[mask])
-    else:
-        mape = np.nan
-    mbe = np.mean(y_pred - y_true)
-
-    return {
-        "Model": nome_modelo,
-        "MAE": mae,
-        "RMSE": rmse,
-        "R²": r2,
-        "MAPE": mape,
-        "MBE": mbe,
-    }
-
-
-# %%
-metricas = [
-    calcular_metricas(df_final["y_true"], df_final["y_pred_CP"], "CP"),
-    calcular_metricas(df_final["y_true"], df_final["y_pred_OUR"], "OUR"),
-    calcular_metricas(df_final["y_true"], df_final["y_pred_SMS"], "SMS"),
-    calcular_metricas(df_final["y_true"], df_final["y_pred_weight_CP_SMS"], "CP_SMS"),
-]
-
-df_metrics = pd.DataFrame(metricas)
-df_metrics.to_csv(f"{SAMPLES}/results/ourinhos/test_metrics.csv", index=False)
-
-# %%
-# %%
-# Create a figure with 4 subplots (4 rows, 1 column) sharing the same X-axis
-fig, axes = plt.subplots(4, 1, figsize=(16, 16), sharex=True)
-
-# List of models, their display labels, and a distinct color for each
-models_to_plot = [
-    ("y_pred_CP", "Model CP", "tab:blue"),
-    ("y_pred_OUR", "Model OUR", "tab:orange"),
-    ("y_pred_SMS", "Model SMS", "tab:green"),
-    ("y_pred_weight_CP_SMS", "Model CP_SMS", "tab:red"),
-]
-
-# Loop through the axes and models to generate each plot
-for ax, (col_name, label, color) in zip(axes, models_to_plot):
-    # Plot Real Value (always in black)
+# Observed value against each model, over the whole evaluation period.
+fig, axes = plt.subplots(len(columns), 1, figsize=(16, 4 * len(columns)), sharex=True)
+for ax, column in zip(axes, columns):
     ax.plot(
-        df_final["timestamp"],
-        df_final["y_true"],
-        label="Real Value",
+        predictions["timestamp"],
+        predictions["y_true"],
+        label="Observed",
         color="black",
-        linewidth=2,
+        linewidth=1.5,
     )
-
-    # Plot the specific model's prediction
-    ax.plot(
-        df_final["timestamp"], df_final[col_name], label=label, color=color, alpha=0.7
-    )
-
-    # Format each subplot
-    ax.set_title(f"Real Value vs {label}", fontsize=14)
-    ax.set_ylabel("Irradiance", fontsize=12)
+    ax.plot(predictions["timestamp"], predictions[column], label=column, alpha=0.7)
+    ax.set_title(f"Observed vs {column}", fontsize=14)
+    ax.set_ylabel("Irradiance (W/m²)")
     ax.legend(loc="upper right")
-
-# Set the X-axis label only on the bottom-most graph
-axes[-1].set_xlabel("Time", fontsize=12)
-
-# Adjust spacing, save, and show
+axes[-1].set_xlabel("Time (UTC)")
 plt.tight_layout()
 plt.savefig(
-    f"{SAMPLES}/results/ourinhos/timeseries_result.png", dpi=300, bbox_inches="tight"
+    figures
+    / f"{model_name.lower()}_predict_{predict.start_date}_{predict.end_date}_timeseries.png",
+    dpi=300,
+    bbox_inches="tight",
 )
 plt.show()
 
 # %%
-fig, axes = plt.subplots(1, 5, figsize=(22, 5))
+# A closer look at a few days (change the window to see another season).
+ZOOM = (
+    pd.Timestamp(predict.start_date, tz="UTC") + pd.Timedelta(days=60),
+    pd.Timestamp(predict.start_date, tz="UTC") + pd.Timedelta(days=67),
+)
+window = predictions[predictions["timestamp"].between(*ZOOM)]
 
-# Gráfico de MAE
-sns.barplot(data=df_metrics, x="Model", y="MAE", ax=axes[0], palette="Blues_d")
-axes[0].set_title("Mean Absolute Error (MAE)")
+fig, ax = plt.subplots(figsize=(16, 5))
+ax.plot(
+    window["timestamp"], window["y_true"], label="Observed", color="black", linewidth=2
+)
+for column in columns:
+    ax.plot(window["timestamp"], window[column], label=column, alpha=0.8)
+ax.set_title(f"{ZOOM[0]:%Y-%m-%d} to {ZOOM[1]:%Y-%m-%d}")
+ax.set_ylabel("Irradiance (W/m²)")
+ax.legend(loc="upper right")
+plt.tight_layout()
+plt.show()
 
-# Gráfico de RMSE
-sns.barplot(data=df_metrics, x="Model", y="RMSE", ax=axes[1], palette="Reds_d")
-axes[1].set_title("Root Mean Squared Error (RMSE)")
-
-# Gráfico de R²
-sns.barplot(data=df_metrics, x="Model", y="R²", ax=axes[2], palette="Greens_d")
-axes[2].set_title("Coefficient of Determination (R²)")
-axes[2].set_ylim(0, 1.1)  # Increased slightly so the label doesn't hit the ceiling
-
-# Gráfico de MAPE
-sns.barplot(data=df_metrics, x="Model", y="MAPE", ax=axes[3], palette="Oranges_d")
-axes[3].set_title("Mean Absolute Percentage Error (MAPE)")
-
-# Gráfico de MBE
-sns.barplot(data=df_metrics, x="Model", y="MBE", ax=axes[4], palette="Purples_d")
-axes[4].set_title("Mean Bias Error (MBE)")
-
-# VISUAL FIX: Loop through all axes and all containers to label every bar
-for ax in axes:
-    for container in ax.containers:
-        ax.bar_label(container, fmt="%.3f", padding=3)
-
-# BEST PRACTICE: tight_layout should go BEFORE savefig
+# %%
+# One bar chart per metric.
+fig, axes = plt.subplots(
+    1, len(metrics.columns), figsize=(4.4 * len(metrics.columns), 5)
+)
+for ax, metric in zip(axes, metrics.columns):
+    bars = ax.bar(
+        metrics.index, metrics[metric], color=sns.color_palette("deep", len(metrics))
+    )
+    ax.bar_label(bars, fmt="%.3f", padding=3)
+    ax.set_title(metric.upper())
+    ax.tick_params(axis="x", rotation=30)
 plt.tight_layout()
 plt.savefig(
-    f"{SAMPLES}/results/ourinhos/model_metrics.png", dpi=300, bbox_inches="tight"
+    figures
+    / f"{model_name.lower()}_predict_{predict.start_date}_{predict.end_date}_metrics.png",
+    dpi=300,
+    bbox_inches="tight",
 )
 plt.show()
-# %%

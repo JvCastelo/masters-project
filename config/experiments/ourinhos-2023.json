@@ -1,0 +1,93 @@
+{
+  "_description": "Experiment: train one model per station on 2022 (80/20 holdout inside 2022), then evaluate every model and the CPA+SMS ensemble on Ourinhos 2023. For build_dataset, ml.train, ml.tune and ml.predict: MASTERS_PIPELINE_CONFIG=config/experiments/ourinhos-2023.json. Do not run the GOES ETL with it: the period covers 2023 for all three stations.",
+  "etl_config": {
+    "start_date": "2022-01-01",
+    "end_date": "2023-12-31",
+    "max_workers": 24,
+    "log_level": "INFO",
+    "filters": {
+      "min_solar_elevation": 5,
+      "frozen_min_run": 10
+    },
+    "goes": {
+      "bucket_name": "noaa-goes16",
+      "product_name": "ABI-L1b-RadF",
+      "variable": "Rad",
+      "pixel_radius": 1,
+      "channels": [
+        "C03"
+      ],
+      "skip_days_without_target": true
+    },
+    "sonda": {
+      "data_type": "solarimetricos",
+      "target_variable": "glo_avg"
+    },
+    "stations": {
+      "SAO_MARTINHO_DA_SERRA": {
+        "latitude": -29.443,
+        "longitude": -53.823
+      },
+      "CACHOEIRA_PAULISTA": {
+        "latitude": -22.69,
+        "longitude": -45.006
+      },
+      "OURINHOS": {
+        "latitude": -23.0,
+        "longitude": -49.844
+      }
+    }
+  },
+  "ml_config": {
+    "selected_model": "KNN",
+    "test_size": 0.2,
+    "evaluation_metrics": [
+      "rmse",
+      "r2",
+      "mae",
+      "mbe",
+      "mape"
+    ],
+    "models": {
+      "KNN": {
+        "n_neighbors": 5,
+        "n_jobs": -1
+      },
+      "XGBoost": {
+        "n_estimators": 100,
+        "learning_rate": 0.1,
+        "n_jobs": -1
+      }
+    },
+    "train": {
+      "start_date": "2022-01-01",
+      "end_date": "2022-12-31"
+    },
+    "predict": {
+      "target_station": "OURINHOS",
+      "start_date": "2023-01-01",
+      "end_date": "2023-12-31",
+      "models": [
+        "CACHOEIRA_PAULISTA",
+        "OURINHOS",
+        "SAO_MARTINHO_DA_SERRA"
+      ],
+      "ensembles": {
+        "CPA_SMS_IDW": {
+          "members": [
+            "CACHOEIRA_PAULISTA",
+            "SAO_MARTINHO_DA_SERRA"
+          ],
+          "weights": "idw"
+        }
+      }
+    }
+  },
+  "tuning_config": {
+    "n_iter": 20,
+    "cv": 3,
+    "scoring": "neg_root_mean_squared_error",
+    "n_jobs": -1,
+    "verbose": 2
+  }
+}

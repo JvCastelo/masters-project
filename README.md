@@ -6,14 +6,14 @@ A data pipeline that predicts ground solar radiation from **GOES-R** satellite i
 
 ```
 SONDA ZIPs ──► etl.sonda ──► data/raw/sonda/*.csv ─┐
-                                                    ├─► etl.build_dataset ──► data/processed/model_input_*.csv ──► ml.train / ml.tune
+                                                    ├─► etl.build_dataset ──► data/processed/<station>/model_input_*.csv ──► ml.train / ml.tune ──► ml.predict
 GOES S3 ─────► etl.goes ───► data/raw/goes/*.csv ──┘
 ```
 
 1. **SONDA ETL** (`etl.sonda`): downloads the SONDA ZIP archives (by year or year-month) of every configured station, extracts the `.dat` files and exports one CSV per station with the target (`glo_avg`, W/m²). Run it **first**: it reports periods SONDA does not publish, and the GOES step uses it to skip days with no target.
 2. **GOES ETL** (`etl.goes`): reads GOES-R ABI NetCDF files from NOAA's Open Data Registry with partial range requests, extracts the pixel window of **all configured stations and channels** in one pass, caches it per day, and exports one CSV per channel and station.
 3. **Build model input** (`etl.build_dataset`): stacks the GOES channels, filters the SONDA target (daytime and frozen-sensor filters), joins both on timestamp, drops missing values, validates the result with pandera and writes the table the ML stage reads.
-4. **Training and tuning** (`ml.train`, `ml.tune`): fit and evaluate the selected model, or search its hyperparameters, for every station.
+4. **Training, tuning and prediction** (`ml.train`, `ml.tune`, `ml.predict`): fit and evaluate the selected model on a training period for every station, search its hyperparameters, and evaluate the trained models (and ensembles of them) on another station or period.
 
 `etl/` and `ml/` never import each other. Their only contract is the `model_input_*.csv` file, whose structure `etl/schemas.py` checks before it is written.
 
@@ -29,7 +29,7 @@ git clone <repository-url>
 cd masters_project
 
 uv sync                      # runtime + dev tools (pytest, ruff, pytest-cov)
-uv sync --group notebooks    # also matplotlib, seaborn, geopy for the notebooks
+uv sync --group notebooks    # also matplotlib and seaborn for the notebooks
 ```
 
 ## Configuration
@@ -43,7 +43,9 @@ Edit `config/pipeline.json` before running the pipeline. It has three top-level 
 | `etl_config.goes` | `bucket_name`, `product_name`, `variable`, `channels` (list, e.g. `["C01", "C03"]`; all are collected in one run), `pixel_radius`, `skip_days_without_target` (default `true`: collect only days on which some station has a SONDA target; needs the SONDA ETL to have run) |
 | `etl_config.sonda` | `data_type`, `target_variable` |
 | `etl_config.filters` | Row filters applied when the model input is built; `null` turns a filter off (default). `min_solar_elevation`: keep rows with the Sun higher than this many degrees. `frozen_min_run`: drop daytime target samples that repeat the same value this many times in a row. See [Filters](#filters) |
-| `ml_config` | `selected_model` (key in `models`), `test_size`, `evaluation_metrics`, `models` (per-model hyperparameters, e.g. `KNN`, `XGBoost`) |
+| `ml_config` | `selected_model` (key in `models`), `test_size`, `evaluation_metrics`, `models` (per-model constructor arguments of the estimator, e.g. `KNN`, `XGBoost`; a plain dict, so a new model needs no change here) |
+| `ml_config.train` | Optional `start_date`/`end_date`: the days of the model input used to train and tune. Without it the whole ETL period is used. Inside it the most recent `test_size` fraction is held out |
+| `ml_config.predict` | Optional, read by `ml.predict`: `target_station`, `start_date`/`end_date` (where it is evaluated), `models` (stations whose trained model is tried), `ensembles` (`{name: {members, weights: "idw"\|"equal"}}`) and an optional `model_name` |
 | `tuning_config` | `n_iter`, `cv`, `scoring`, `n_jobs`, `verbose` |
 
 To run with a different configuration without editing this file, set `MASTERS_PIPELINE_CONFIG=/path/to/other.json` (same structure).
@@ -109,14 +111,43 @@ Applied to the SONDA series at its native 1-minute resolution, before the join (
 - **Structure** (violations raise `DataValidationError`, and the file is not written): expected columns, timezone-aware UTC timestamps that are unique and sorted, numeric target, no missing values and complete GOES windows (every channel has all `(2·radius+1)²` pixels) in the model input.
 - **Quality** (violations only log a warning with the offending range; the rows are kept): the target inside `[-100, 2000]` W/m². On the real data this flags exactly one thing: a defective Cachoeira Paulista sensor (2023-10-03 to 12, down to −765 W/m²). Isolated midday peaks up to 1657 W/m² are real cloud-enhancement events and are not flagged.
 
-### 4. Training and tuning (optional)
+### 4. Training, tuning and prediction
 
 ```bash
-uv run python -m masters_project.ml.train
-uv run python -m masters_project.ml.tune
+uv run python -m masters_project.ml.train      # one model per station
+uv run python -m masters_project.ml.tune       # search the hyperparameters
+uv run python -m masters_project.ml.predict    # evaluate trained models on another station/period
 ```
 
-Both fit one model per station on a chronological split (no shuffling, so the test set is the most recent data) and exit with code 1 if any station failed.
+Each model is a scikit-learn `Pipeline` (`StandardScaler`, then the estimator). Training and tuning build the **same** pipeline, so the scaler is part of every search. A new model is one entry in `ml/models.py` (`MODELS`: the estimator and its search space).
+
+**Train and test.** `ml.train` filters the station's model input by `ml_config.train`, holds out the most recent `test_size` of those days (never shuffled) and fits on the rest. It writes the model, a **model card** beside it and an evaluation report on the held-out days:
+
+- `data/models/<station>/<model>_st_<train start>_et_<train end>_<STATION>_v1.joblib`: the fitted pipeline. Its name carries the **training** period, not the ETL period.
+- `...v1.json` (the card): model type, every estimator parameter, requested and actual training period, train/test rows, feature names, dataset (path, sha256 and the dataset manifest with the filters it was built with), git revision and library versions.
+- `data/results/<station>/..._metrics.json`: the metrics plus the same context.
+
+`ml.tune` searches on the same training rows and writes `..._tuning.json`: the best parameters (ready to paste under `ml_config.models`) and the search space, `n_iter`, `cv`, `scoring` and dataset that produced them.
+
+Every `model_input_*.csv` has a manifest, `model_input_*.meta.json`: filters, period, rows, first/last timestamp, the CSV's sha256 and the git revision. A model card copies it, so the filters a model was trained with are never a guess.
+
+**Predict.** `ml.predict` reads `ml_config.predict`. For the target station and period it loads the model trained on each listed station (the artifact of `ml_config.train`), predicts with the columns that model was trained on **selected by name**, builds each ensemble, and scores every model and ensemble against the observed target. Ensemble members are weighted by inverse distance to the target station (`idw`; with two members, `d2 / (d1 + d2)`) or equally (`equal`); the target station itself cannot be a member of an `idw` ensemble. It writes to the target station's results directory:
+
+- `<model>_predict_st_<start>_et_<end>_<TARGET>_predictions.csv`: `timestamp`, `y_true`, one column per model and ensemble.
+- `..._metrics.json`: the metrics of every column, the models used and their training periods, the ensemble weights, the dataset hash and the revision.
+
+It only warns, never fails, about what makes a score hard to trust: a model evaluated on its own training days, training and evaluation datasets built with different filters, or a dataset or model without a manifest/card. Expected failures (a model that was not trained, a missing column, an empty period, no `ml_config.predict`) are logged with the fix and the command exits with code 1.
+
+**Example: train on 2022, test on Ourinhos 2023.** `config/experiments/ourinhos-2023.json` trains one model per station on 2022 and evaluates the three models and a CPA+SMS inverse-distance ensemble on Ourinhos 2023:
+
+```bash
+export MASTERS_PIPELINE_CONFIG=config/experiments/ourinhos-2023.json
+uv run python -m masters_project.etl.build_dataset
+uv run python -m masters_project.ml.train
+uv run python -m masters_project.ml.predict
+```
+
+`notebooks/02_test_model.py` plots what `ml.predict` wrote (it computes nothing). Do not run the GOES ETL with this config: its period covers 2023 for all three stations.
 
 ### Recommended Execution Workflow
 
@@ -137,10 +168,12 @@ data/
 │   └── sonda/<station>/     sonda_<type>_st_<start>_et_<end>_<STATION>.csv
 ├── cache/goes/              listing, pixel and per-day caches (per channel and day; safe to delete, rebuilt from S3)
 ├── processed/<station>/     model_input_st_<start>_et_<end>_<STATION>.csv
-├── models/<station>/        <model>_st_..._<STATION>_v1.joblib
-├── results/<station>/       <model>_st_..._<STATION>_v1_metrics.json, ..._tuning.json
+├── processed/<station>/     ... and its manifest, model_input_*.meta.json
+├── models/<station>/        <model>_st_<train period>_<STATION>_v1.joblib and its card (.json)
+├── results/<station>/       ..._metrics.json, ..._tuning.json, <model>_predict_..._predictions.csv, ..._metrics.json
 ├── logs/<pipeline>/         <YYYY-MM-DD_HHMMSS>.log, latest.log
-└── samples/                 tests, samples and experiments, in the same tree (kept apart from the real runs)
+└── samples/                 tests, samples and experiments, in the same tree (kept apart from the real runs;
+                             models saved before the pipeline refactor are in an old format and cannot be loaded)
 ```
 
 `raw/` and `processed/` hold only complete collection periods; anything that is a test or a sample (single months, January slices, models trained on them, notebook outputs) goes under `data/samples/`.
@@ -157,7 +190,8 @@ Levels: `INFO` marks the milestones of a stage; `DEBUG` is per-file detail and i
 
 ```
 masters_project/
-├── config/pipeline.json
+├── config/pipeline.json        # development defaults
+├── config/experiments/         # one file per experiment (period, training window, predict section)
 ├── notebooks/                  # exploratory analysis (needs --group notebooks)
 ├── src/masters_project/
 │   ├── settings.py             # pydantic config and project paths
@@ -174,7 +208,7 @@ masters_project/
 │   │   ├── filters.py          # daytime and frozen-sensor filters
 │   │   ├── schemas.py          # pandera data contracts
 │   │   └── build_dataset.py
-│   └── ml/                     # models (scaler + estimator pipelines), evaluate, data, train, tune
+│   └── ml/                     # models, artifacts (model cards), evaluate, data, ensemble, train, tune, predict
 └── tests/                      # mirrors src/
 ```
 
