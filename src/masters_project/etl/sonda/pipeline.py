@@ -16,7 +16,7 @@ from masters_project.file_paths import file_paths
 from masters_project.exporters import CSVExporter
 from masters_project.etl.sonda.processor import SondaProcessor
 from masters_project.settings import settings
-from masters_project.utils import format_period, get_target_periods
+from masters_project.etl.sonda.periods import format_period, get_target_periods
 
 settings.setup_logging("sonda_etl")
 logger = logging.getLogger(__name__)

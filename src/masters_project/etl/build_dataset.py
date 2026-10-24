@@ -6,7 +6,7 @@ from collections import defaultdict
 
 import pandas as pd
 
-from masters_project.enums import GoesChannelEnums
+from masters_project.enums import GoesChannel
 from masters_project.file_paths import file_paths
 from masters_project.exporters import CSVExporter
 from masters_project.etl.merger import DatasetMerger
@@ -36,7 +36,7 @@ def build_station_input(station: str) -> bool:
     logger.info(f"[{station}] Scanning directory: {goes_dir}")
 
     for file_path in goes_dir.glob(f"goes_*_{station}.csv"):
-        for channel in GoesChannelEnums:
+        for channel in GoesChannel:
             if f"goes_{channel.value}_" in file_path.name:
                 logger.debug(f"Found file for {channel.value}: {file_path.name}")
                 df = pd.read_csv(file_path)

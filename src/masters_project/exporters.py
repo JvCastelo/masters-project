@@ -1,3 +1,9 @@
+"""Write pipeline outputs to disk: DataFrames as CSV and dictionaries as JSON.
+
+Every exporter skips an empty payload with a warning and creates the missing parent
+directories, so callers never have to guard against either.
+"""
+
 import json
 import logging
 from abc import ABC, abstractmethod
@@ -6,99 +12,58 @@ from typing import Any
 
 import pandas as pd
 
-from masters_project.utils import measure_memory, time_track
+from masters_project.utils import time_track
 
 logger = logging.getLogger(__name__)
 
 
 class BaseExporter(ABC):
-    """Abstract base for exporting in-memory data to a file on disk.
+    """Template for writing one in-memory payload (DataFrame, dict) to a file.
 
-    Subclasses narrow ``data`` to a concrete type (DataFrame, dict, etc.). ``export``
-    uses ``Any`` here because each subclass accepts a different payload type.
+    Subclasses only implement ``_save_to_disk``; skipping empty payloads, creating the
+    parent directory, logging and re-raising errors are done here once.
     """
 
-    @abstractmethod
+    @time_track
     def export(self, data: Any, destination: Path) -> None:
-        """Write ``data`` to ``destination`` using subclass-specific serialization."""
-        pass
+        """Write ``data`` to ``destination``; an empty payload is skipped with a warning.
 
+        Args:
+            data: DataFrame or mapping to serialize.
+            destination: Output file path. Missing parent directories are created.
 
-class DataFrameExporter(BaseExporter):
-    """Base class for tabular exports (CSV, Parquet, etc.)."""
-
-    @measure_memory
-    @time_track
-    def export(self, data: pd.DataFrame, destination: Path) -> None:
-        if data.empty:
+        Raises:
+            Exception: Anything raised while writing is logged and re-raised.
+        """
+        if len(data) == 0:
             logger.warning(
-                f"Attempted to export an empty DataFrame to {destination.name}. Skipping."
+                f"Attempted to export an empty payload to {destination.name}. Skipping."
             )
             return
 
-        logger.debug(f"Preparing to export data to {destination}...")
         try:
             destination.parent.mkdir(parents=True, exist_ok=True)
             self._save_to_disk(data, destination)
-            logger.info(f"Successfully exported {data.shape[0]} rows to {destination}")
+            logger.info(f"Successfully exported {len(data)} items to {destination}")
         except Exception as e:
-            logger.error(f"Error exporting DataFrame: {e}")
+            logger.error(f"Error exporting to {destination}: {e}")
             raise
 
     @abstractmethod
-    def _save_to_disk(self, df: pd.DataFrame, destination: Path) -> None:
-        """Serialize ``df`` to ``destination`` (format-specific)."""
-        pass
+    def _save_to_disk(self, data: Any, destination: Path) -> None:
+        """Serialize ``data`` to ``destination`` (format-specific)."""
 
 
-class DictExporter(BaseExporter):
-    """Base class for serializing mapping payloads (JSON, YAML, etc.)."""
+class CSVExporter(BaseExporter):
+    """Write a DataFrame to a CSV file (no index)."""
 
-    @time_track
-    def export(self, data: dict[str, Any], destination: Path) -> None:
-        if not data:
-            logger.warning(
-                f"Attempted to export an empty dictionary to {destination.name}. Skipping."
-            )
-            return
-
-        logger.debug(f"Preparing to export dictionary to {destination}...")
-        try:
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            self._save_to_disk(data, destination)
-            logger.info(f"Successfully exported dictionary to {destination}")
-        except Exception as e:
-            logger.error(f"Error exporting Dictionary: {e}")
-            raise
-
-    @abstractmethod
-    def _save_to_disk(self, data: dict[str, Any], destination: Path) -> None:
-        """Write ``data`` to ``destination`` (format-specific)."""
-        pass
+    def _save_to_disk(self, data: pd.DataFrame, destination: Path) -> None:
+        data.to_csv(destination, index=False)
 
 
-class CSVExporter(DataFrameExporter):
-    """Exporter that writes DataFrames to CSV files (no index)."""
-
-    def _save_to_disk(self, df: pd.DataFrame, destination: Path) -> None:
-        """Write the DataFrame to a CSV file at destination.
-
-        Args:
-            df: DataFrame to serialize.
-            destination: Output file path (e.g. .csv).
-        """
-        df.to_csv(destination, index=False)
-
-
-class JSONExporter(DictExporter):
-    """Serialize a dictionary to a UTF-8 JSON file (pretty-printed, 4-space indent)."""
+class JSONExporter(BaseExporter):
+    """Write a dictionary to a UTF-8 JSON file (pretty-printed, 4-space indent)."""
 
     def _save_to_disk(self, data: dict[str, Any], destination: Path) -> None:
-        """Write ``data`` as JSON to ``destination``.
-
-        Args:
-            data: Mapping to serialize (typically metrics or metadata).
-            destination: Output file path (e.g. ``.json``).
-        """
         with open(destination, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=4)

@@ -13,7 +13,7 @@ from pydantic import (
     model_validator,
 )
 
-from masters_project.enums import GoesChannelEnums
+from masters_project.enums import GoesChannel
 
 
 class GoesConfig(BaseModel):
@@ -31,7 +31,7 @@ class GoesConfig(BaseModel):
     def _channels_are_valid_abi_channels(cls, channels: list[str]) -> list[str]:
         if not channels:
             raise ValueError("goes.channels must list at least one channel.")
-        invalid = [c for c in channels if c not in GoesChannelEnums.__members__]
+        invalid = [c for c in channels if c not in GoesChannel.__members__]
         if invalid:
             raise ValueError(f"Unknown GOES channels: {invalid}. Use C01 to C16.")
         return channels

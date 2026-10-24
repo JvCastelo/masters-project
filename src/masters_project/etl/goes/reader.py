@@ -109,7 +109,7 @@ class GoesProcessor:
         return pd.to_datetime(time_str).round("10min").tz_convert("UTC")
 
     @staticmethod
-    def read_windows_h5(
+    def read_windows(
         file_obj: BinaryIO,
         variable: str,
         radius: int,

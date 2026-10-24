@@ -1,4 +1,4 @@
-"""Tests for masters_project.exporters: DataFrameExporter, CSVExporter, JSONExporter."""
+"""Tests for masters_project.exporters: CSVExporter and JSONExporter."""
 
 import json
 from pathlib import Path

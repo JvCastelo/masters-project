@@ -3,8 +3,8 @@ from pathlib import Path
 
 import httpx
 
-from masters_project.enums import SondaStationEnums
-from masters_project.utils import measure_memory, time_track
+from masters_project.enums import SondaStation
+from masters_project.utils import time_track
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 class SondaClient:
     """Client for downloading SONDA (Brazilian solar/radiation) data from INPE's HTTP API.
 
-    Resolves station names to station codes via SondaStationEnums and downloads
+    Resolves station names to station codes via SondaStation and downloads
     yearly or monthly ZIP archives to a local directory.
     """
 
@@ -20,18 +20,18 @@ class SondaClient:
         """Initialize the SONDA client for a given station and data type.
 
         Args:
-            station: Station name matching a key in SondaStationEnums (e.g. 'BRASILIA').
+            station: Station name matching a key in SondaStation (e.g. 'BRASILIA').
             data_type: Data product type used in the download URL path.
 
         Raises:
-            ValueError: If station is not a valid SondaStationEnums member.
+            ValueError: If station is not a valid SondaStation member.
         """
         try:
-            station_enum = SondaStationEnums[station]
+            station_enum = SondaStation[station]
             self.station_code = station_enum.value
             self.station_name = station_enum.name
         except KeyError:
-            valid_options = [s.name for s in SondaStationEnums]
+            valid_options = [s.name for s in SondaStation]
             logger.error(
                 f"Failed to initialize SondaClient: Invalid station '{station}'."
             )
@@ -45,7 +45,6 @@ class SondaClient:
             f"Initialized SondaClient for station {self.station_name} ({self.data_type})."
         )
 
-    @measure_memory
     @time_track
     def _download(self, url: str, output_path: Path) -> Path:
         """Download a file from a URL to disk via streaming.
@@ -89,7 +88,6 @@ class SondaClient:
             logger.exception(f"Unexpected error during download from {url}")
             raise
 
-    @measure_memory
     @time_track
     def download_file_by_year(self, year: int, output_dir: str) -> Path:
         """Download the SONDA yearly ZIP file for the given year.
@@ -111,7 +109,6 @@ class SondaClient:
         logger.debug(f"Constructed yearly URL for {year}: {url}")
         return self._download(url, path)
 
-    @measure_memory
     @time_track
     def download_file_by_year_month(
         self, year: int, month: int, output_dir: str

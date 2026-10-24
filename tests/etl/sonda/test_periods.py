@@ -1,10 +1,10 @@
-"""Tests for masters_project.utils: date parsing and date-range helpers."""
+"""Tests for masters_project.etl.sonda.periods: date parsing and date-range helpers."""
 
 from datetime import date
 
 import pytest
 
-from masters_project.utils import (
+from masters_project.etl.sonda.periods import (
     format_period,
     get_target_periods,
     get_target_year_months,

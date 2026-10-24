@@ -31,7 +31,7 @@ def test_extract_file_collects_garbage_after_success() -> None:
         patch.object(worker, "_get_client", return_value=client),
         patch.object(
             worker.GoesProcessor,
-            "read_windows_h5",
+            "read_windows",
             return_value=("ts", {"A": [1.0]}),
         ) as read,
         patch.object(worker.gc, "collect") as collect,

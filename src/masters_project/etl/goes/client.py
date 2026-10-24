@@ -55,10 +55,9 @@ class GoesS3Client:
     def open_partial(self, file_path: str) -> s3fs.core.S3File:
         """Open a GOES file for partial reads (HTTP range requests with a block cache).
 
-        Unlike :meth:`get_file` followed by ``read()``, this does not download the whole
-        file: h5netcdf only fetches the metadata blocks and the chunks it actually touches.
-        Intentionally not decorated with ``measure_memory``/``time_track``: ``tracemalloc``
-        slows down the hot path and is not safe across threads.
+        Unlike ``fs.open(...).read()``, this does not download the whole file: h5py only
+        fetches the metadata blocks and the chunks it actually touches. Intentionally not
+        decorated with ``time_track``, as it sits on the hot path of every extraction.
 
         Args:
             file_path: S3 object key (path within the bucket), without the 's3://' prefix.

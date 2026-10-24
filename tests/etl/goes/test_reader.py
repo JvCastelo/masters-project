@@ -102,7 +102,7 @@ def test_get_target_indices_point_behind_earth_raises_valueerror(
 
 
 # =============================================================================
-# read_windows_h5: direct HDF5 reader must match the xarray path exactly
+# read_windows: direct HDF5 reader must match the xarray path exactly
 # =============================================================================
 
 
@@ -144,7 +144,7 @@ def test_read_windows_h5_matches_xarray_including_fill_values(packed_netcdf) -> 
     radius = 1
 
     with open(packed_netcdf, "rb") as f:
-        timestamp, windows = GoesProcessor.read_windows_h5(f, "Rad", radius, pixels)
+        timestamp, windows = GoesProcessor.read_windows(f, "Rad", radius, pixels)
 
     with xr.open_dataset(packed_netcdf, engine="h5netcdf") as ds:
         for name, (i, j) in pixels.items():

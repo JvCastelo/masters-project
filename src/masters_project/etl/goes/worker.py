@@ -64,7 +64,7 @@ def extract_file(path: str, job: ExtractionJob) -> FileExtraction:
     """
     try:
         with _get_client(job).open_partial(path) as file:
-            timestamp, windows = GoesProcessor.read_windows_h5(
+            timestamp, windows = GoesProcessor.read_windows(
                 file, job.variable, job.radius, job.pixels
             )
         return FileExtraction(source_key=path, timestamp=timestamp, windows=windows)

@@ -1,7 +1,7 @@
 from enum import StrEnum
 
 
-class SondaStationEnums(StrEnum):
+class SondaStation(StrEnum):
     """SONDA network station identifiers: enum name (location) maps to station code used in URLs/APIs."""
 
     BRASILIA = "BRB"
@@ -27,7 +27,7 @@ class SondaStationEnums(StrEnum):
     SOMBRIO = "SBR"
 
 
-class GoesChannelEnums(StrEnum):
+class GoesChannel(StrEnum):
     """GOES-R ABI channel identifiers (C01–C16) for band selection in file discovery and processing."""
 
     C01 = "C01"

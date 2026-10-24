@@ -8,7 +8,7 @@ from pathlib import Path
 import pandas as pd
 
 from masters_project.settings import settings
-from masters_project.utils import measure_memory, time_track
+from masters_project.utils import time_track
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,6 @@ class SondaProcessor:
     """Process SONDA ZIP archives: extract, load .dat into DataFrame, and format columns/timestamps."""
 
     @staticmethod
-    @measure_memory
     @time_track
     def extract_zip(zip_path: Path, delete_zip: bool = True) -> Path:
         """Extract a SONDA ZIP to a directory with the same base name, optionally removing the ZIP.
@@ -57,7 +56,6 @@ class SondaProcessor:
             raise
 
     @staticmethod
-    @measure_memory
     @time_track
     def create_dataframe(extraction_dir: Path) -> pd.DataFrame:
         """Load the first .dat file in the directory into a DataFrame and remove the extraction dir.
@@ -98,7 +96,6 @@ class SondaProcessor:
             raise
 
     @staticmethod
-    @measure_memory
     @time_track
     def format_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         """Drop header row and unused columns, coerce glo_avg to numeric, localize timestamps to UTC.
