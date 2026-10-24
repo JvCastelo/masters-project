@@ -7,9 +7,7 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 
-from masters_project.exporters import CSVExporter
-from masters_project.exporters import JSONExporter
-
+from masters_project.exporters import CSVExporter, JSONExporter
 
 # =============================================================================
 # Fixtures

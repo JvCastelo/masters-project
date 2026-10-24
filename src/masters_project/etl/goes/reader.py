@@ -1,3 +1,6 @@
+"""Read pixel windows from a GOES ABI radiance file: station coordinates to grid indices, and
+HDF5 reads that skip xarray and fetch only the chunks they need."""
+
 import logging
 from typing import BinaryIO
 
@@ -120,7 +123,7 @@ class GoesProcessor:
         Skips xarray, which parses the metadata of every variable in the file (more
         requests and CPU per file over S3). Applies the CF packing the same way xarray
         does: ``_FillValue`` becomes NaN, then ``value * scale_factor + add_offset`` in
-        the attribute's dtype, so the values are identical to the xarray path.
+        the attribute's dtype, so the values are the ones xarray would return (checked by a test).
 
         Args:
             file_obj: Seekable binary file (e.g. an s3fs file opened with a block cache).

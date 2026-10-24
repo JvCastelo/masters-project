@@ -6,12 +6,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from masters_project.etl.goes.reader import GoesProcessor
 from masters_project.etl.schemas import (
     DataValidationError,
     validate_model_input,
     validate_sonda,
 )
-from masters_project.etl.goes.reader import GoesProcessor
 
 TARGET = "glo_avg"
 PIXELS = GoesProcessor.window_columns(1, "C03") + GoesProcessor.window_columns(1, "C13")

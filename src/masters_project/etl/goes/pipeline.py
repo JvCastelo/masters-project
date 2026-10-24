@@ -17,9 +17,6 @@ from pathlib import Path
 import pandas as pd
 from tqdm import tqdm
 
-from masters_project.etl.goes.client import GoesS3Client
-from masters_project.file_paths import file_paths
-from masters_project.exporters import CSVExporter
 from masters_project.etl.goes.cache import (
     Day,
     extractions_to_frame,
@@ -30,13 +27,16 @@ from masters_project.etl.goes.cache import (
     save_day,
     save_pixels,
 )
+from masters_project.etl.goes.client import GoesS3Client
 from masters_project.etl.goes.reader import GoesProcessor
-from masters_project.etl.sonda.processor import SondaProcessor
 from masters_project.etl.goes.worker import (
     ExtractionJob,
     FileExtraction,
     extract_file,
 )
+from masters_project.etl.sonda.processor import SondaProcessor
+from masters_project.exporters import CSVExporter
+from masters_project.file_paths import file_paths
 from masters_project.settings import settings
 
 logger = logging.getLogger(__name__)

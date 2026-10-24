@@ -4,12 +4,12 @@ import logging
 import sys
 
 from masters_project.file_paths import file_paths
-from masters_project.ml.evaluate import evaluate_performance
-from masters_project.ml.factory import build_model
 from masters_project.ml.data import (
     get_train_test_splits,
     load_model_input_data,
 )
+from masters_project.ml.evaluate import evaluate_performance
+from masters_project.ml.factory import build_model
 from masters_project.settings import settings
 
 logger = logging.getLogger(__name__)

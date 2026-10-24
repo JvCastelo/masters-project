@@ -5,13 +5,13 @@ import sys
 
 from sklearn.model_selection import RandomizedSearchCV
 
-from masters_project.file_paths import file_paths
 from masters_project.exporters import JSONExporter
-from masters_project.ml.tuning import get_tuning_config
+from masters_project.file_paths import file_paths
 from masters_project.ml.data import (
     get_train_test_splits,
     load_model_input_data,
 )
+from masters_project.ml.tuning import get_tuning_config
 from masters_project.settings import settings
 
 logger = logging.getLogger(__name__)

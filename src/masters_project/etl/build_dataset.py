@@ -7,27 +7,33 @@ from collections import defaultdict
 import pandas as pd
 
 from masters_project.enums import GoesChannel
-from masters_project.file_paths import file_paths
-from masters_project.exporters import CSVExporter
+from masters_project.etl.filters import drop_frozen, keep_daytime
 from masters_project.etl.merger import DatasetMerger
 from masters_project.etl.schemas import DataValidationError, validate_model_input
-from masters_project.etl.filters import drop_frozen, keep_daytime
+from masters_project.exporters import CSVExporter
+from masters_project.file_paths import file_paths
 from masters_project.settings import settings
 
 logger = logging.getLogger(__name__)
 
 
 def build_station_input(station: str) -> bool:
-    """Concatenate ``station``'s GOES CSVs per channel, join channels on time, join SONDA, drop NaNs.
+    """Build and write the model input of one station.
 
-    Only GOES files whose name ends with ``_{station}.csv`` are used. Writes the result to
-    :func:`~masters_project.file_paths.FilePathBuilder.model_input`.
+    Steps: stack the station's GOES CSVs of each channel (overlapping periods are merged,
+    repeated timestamps dropped), join the channels side by side, filter the SONDA target
+    (daytime and frozen-sensor filters from ``etl_config.filters``), inner-join it with the
+    GOES features, drop rows with missing values, validate the result and write it.
+
+    Only GOES files in ``data/raw/goes`` whose name ends with ``_{station}.csv`` are used.
+    The output goes to :func:`~masters_project.file_paths.FilePathBuilder.model_input`.
 
     Args:
         station: Station key (a key of ``etl_config.stations``).
 
     Returns:
-        True if the model input was written, False if inputs were missing.
+        True if the model input was written; False if the GOES or SONDA input is missing,
+        or the result fails validation (nothing is written then).
     """
     goes_dir = settings.RAW_PATH / "goes"
 

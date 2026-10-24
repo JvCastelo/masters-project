@@ -1,3 +1,5 @@
+"""Stack and join time series on a UTC ``timestamp``, never multiplying rows on repeated timestamps."""
+
 import logging
 from functools import reduce
 

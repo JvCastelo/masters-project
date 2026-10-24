@@ -1,3 +1,6 @@
+"""Radiation regressors: a base class that scales features before an estimator, and the KNN and
+XGBoost models built on it."""
+
 import logging
 from abc import ABC
 from pathlib import Path
@@ -20,6 +23,7 @@ class BaseRadiationModel(ABC):
     """
 
     def __init__(self) -> None:
+        """Create an unfitted model: no estimator yet, a fresh scaler, ``is_trained`` False."""
         self.model = None
         self.scaler = StandardScaler()
         self.is_trained = False
@@ -84,6 +88,12 @@ class KNNModel(BaseRadiationModel):
     """K-nearest neighbors regressor for radiation prediction."""
 
     def __init__(self, n_neighbors: int = 5, n_jobs: int = -1) -> None:
+        """Build the regressor.
+
+        Args:
+            n_neighbors: Number of neighbours that vote on each prediction.
+            n_jobs: Parallel jobs for the neighbour search (-1 uses every core).
+        """
         super().__init__()
 
         self.model = KNeighborsRegressor(n_neighbors=n_neighbors, n_jobs=n_jobs)
@@ -95,6 +105,13 @@ class XGBoostModel(BaseRadiationModel):
     def __init__(
         self, n_estimators: int = 100, learning_rate: float = 0.1, n_jobs: int = -1
     ) -> None:
+        """Build the regressor (``random_state`` is fixed at 42 for reproducible runs).
+
+        Args:
+            n_estimators: Number of boosted trees.
+            learning_rate: Shrinkage applied to each tree.
+            n_jobs: Parallel threads (-1 uses every core).
+        """
         super().__init__()
         self.model = XGBRegressor(
             n_estimators=n_estimators,

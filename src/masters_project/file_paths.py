@@ -1,3 +1,5 @@
+"""Canonical paths of every file the pipeline reads or writes: raw, cache, processed, models, results."""
+
 from pathlib import Path
 
 from masters_project.settings import settings

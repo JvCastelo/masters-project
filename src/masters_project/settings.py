@@ -1,3 +1,5 @@
+"""Pipeline configuration (``config/pipeline.json``) validated with pydantic, plus project paths and logging."""
+
 import json
 import logging
 import os

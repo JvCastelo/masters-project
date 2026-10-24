@@ -1,3 +1,5 @@
+"""Estimators and search spaces used by ``RandomizedSearchCV``, per model."""
+
 import logging
 from typing import Any
 

@@ -1,3 +1,5 @@
+"""Download the SONDA (INPE) ZIP archives of one station, by year or by month."""
+
 import logging
 from pathlib import Path
 

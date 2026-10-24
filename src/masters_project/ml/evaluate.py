@@ -1,3 +1,5 @@
+"""Score predictions with the configured metrics and write the JSON report of a station."""
+
 import logging
 from typing import Any
 
@@ -10,8 +12,8 @@ from sklearn.metrics import (
     root_mean_squared_error,
 )
 
-from masters_project.file_paths import file_paths
 from masters_project.exporters import JSONExporter
+from masters_project.file_paths import file_paths
 from masters_project.settings import settings
 
 logger = logging.getLogger(__name__)

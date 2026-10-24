@@ -1,3 +1,6 @@
+"""Turn a SONDA ZIP into a clean DataFrame (extract, parse the ``.dat``, keep timestamp and target)
+and measure how many days have a valid target."""
+
 import logging
 import shutil
 import zipfile

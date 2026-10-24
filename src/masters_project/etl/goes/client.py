@@ -1,3 +1,5 @@
+"""S3 access to the GOES-R archive: cached per-day listings and partial-read file opens."""
+
 import json
 import logging
 import re

@@ -1,7 +1,8 @@
+"""Build a radiation model by name from the registry."""
+
 import logging
 
-from masters_project.ml.models import BaseRadiationModel
-from masters_project.ml.models import KNNModel, XGBoostModel
+from masters_project.ml.models import BaseRadiationModel, KNNModel, XGBoostModel
 
 logger = logging.getLogger(__name__)
 

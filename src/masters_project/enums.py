@@ -1,3 +1,5 @@
+"""Identifiers of the SONDA stations (name -> network code used in URLs) and of the GOES-R ABI channels."""
+
 from enum import StrEnum
 
 
