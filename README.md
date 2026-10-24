@@ -40,7 +40,7 @@ Every command writes its own log under `data/logs/<pipeline>/` (see [Logs](#logs
 git clone <repository-url>
 cd masters_project
 
-uv sync                      # runtime (including matplotlib) + dev tools (pytest, ruff, pytest-cov, ipykernel)
+uv sync                      # runtime (including matplotlib) + dev tools (pytest, ruff, pytest-cov, ipykernel); or `make install`
 ```
 
 ## Configuration
@@ -150,7 +150,7 @@ Every `model_input_*.csv` that `build_dataset` writes has a manifest, `model_inp
 
 It only warns, never fails, about what makes a score hard to trust: a model evaluated on its own training days, training and evaluation datasets built with different filters, or a dataset or model without a manifest/card. Expected failures (a model that was not trained, a missing column, an empty period, no `ml_config.predict`) are logged with the fix and the command exits with code 1.
 
-**Example: train on 2022, test on Ourinhos 2023.** `config/experiments/ourinhos-2023.json` trains one model per station on 2022 and evaluates the three models and a CPA+SMS inverse-distance ensemble on Ourinhos 2023:
+**Example: train on 2022, test on Ourinhos 2023** (or just `make experiment`). `config/experiments/ourinhos-2023.json` trains one model per station on 2022 and evaluates the three models and a CPA+SMS inverse-distance ensemble on Ourinhos 2023:
 
 ```bash
 export MASTERS_PIPELINE_CONFIG=config/experiments/ourinhos-2023.json
@@ -179,6 +179,35 @@ The figures are built with matplotlib's object API (no `pyplot`, no display), so
 5. Run `ml.predict`, then `ml.plots`.
 
 **Several periods (e.g. 2022 with three stations, then 2023 with one).** Collect each period with its own `start_date`/`end_date` and its own `etl_config.stations`. The GOES CSVs of every period in the station's directory are stacked by `build_dataset`, but the SONDA CSV is read **only for the configured span**, so rows of the other period would be silently dropped by the join. Before `build_dataset`, set `start_date`/`end_date` to the full span (e.g. `2022-01-01` to `2023-12-31`), run the SONDA ETL again (about a second per station-year) and then `build_dataset`. The GOES cache is reused for overlapping days, and a station with no GOES for a period simply contributes no rows for it.
+
+## Shortcuts (Makefile)
+
+Every command above has a `make` target, so you do not type the `uv run python -m ...` lines. `make` with no target lists them.
+
+| Target | Runs | Config used |
+|---|---|---|
+| `make sonda` | `etl.sonda` (`BY=month` for monthly ZIPs) | `config/pipeline.json` |
+| `make goes` | `etl.goes` | `config/pipeline.json` |
+| `make etl` | `sonda`, then `goes` | `config/pipeline.json` |
+| `make dataset` | `etl.build_dataset` (`STATION=OURINHOS`, `GOES_DIR=<name>`) | the experiment |
+| `make train` / `tune` / `predict` / `plots` | the matching `ml.*` command | the experiment |
+| `make experiment` | `dataset`, `train`, `predict`, `plots`, in that order | the experiment |
+| `make show-config` | prints the config each group uses and its periods | |
+| `make logs PIPELINE=etl_goes` | follows the newest log of a pipeline | |
+| `make test` / `cov` / `lint` / `format` / `check` | tests, coverage, ruff; `check` runs lint, formatting and coverage | |
+| `make install` / `clean` | `uv sync` / remove Python and tool caches | |
+
+**Which config.** The collection targets (`sonda`, `goes`, `etl`) use `config/pipeline.json`. The model targets use the experiment, `config/experiments/ourinhos-2023.json` (change it with `EXPERIMENT=<file>`). `CONFIG=<file>`, relative or absolute, overrides the config of **any** target; the Makefile passes it as an absolute `MASTERS_PIPELINE_CONFIG`, so it works from any directory.
+
+```bash
+make experiment                                  # dataset -> train -> predict -> plots, on the experiment
+make dataset STATION=OURINHOS                    # rebuild one station
+make sonda BY=month
+make etl CONFIG=/path/to/collection.json         # collect with a config of your own
+make logs PIPELINE=ml_train
+```
+
+**Safety.** `make goes` (and so `make etl`) **refuses an experiment config**: that period covers years that were not collected for every station and would read a huge number of files. In `make etl` a SONDA error only prints a warning (SONDA may not publish a month) and the GOES step still runs; its own failure is not hidden. The steps of a chain never run in parallel, even with `make -j`. No target deletes anything in `data/`: `clean` only removes caches. `tests/test_makefile.py` checks what each target would run, without starting any pipeline.
 
 ## Outputs
 
@@ -212,6 +241,7 @@ Levels: `INFO` marks the milestones of a stage; `DEBUG` is per-file detail and i
 
 ```
 masters_project/
+├── Makefile                    # shortcuts for every command (make help)
 ├── config/pipeline.json        # development defaults
 ├── config/experiments/         # one file per experiment (period, training window, predict section)
 ├── notebooks/                  # 02_test_model.py: looks at a prediction run through ml.plots
@@ -241,6 +271,7 @@ uv run pytest                   # all tests
 uv run pytest --cov             # with coverage; fails below 90% (currently ~100%)
 uv run ruff check src tests     # lint
 uv run ruff format src tests    # format
+make check                      # lint, formatting and tests with coverage in one go
 ```
 
 Tests never touch `data/`: `tests/conftest.py` points every path in `settings` (including the logs) at a temporary directory, and S3, the SONDA server and the GOES process pool are replaced by fakes.
