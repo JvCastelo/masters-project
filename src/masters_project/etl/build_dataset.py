@@ -1,4 +1,4 @@
-"""Build merged model input per station: stack GOES channels, join SONDA, drop NaNs, keep daytime, export CSV."""
+"""Build merged model input per station: stack GOES channels, filter and join SONDA, drop NaNs, export CSV."""
 
 import logging
 import sys
@@ -10,7 +10,7 @@ from masters_project.enums import GoesChannel
 from masters_project.file_paths import file_paths
 from masters_project.exporters import CSVExporter
 from masters_project.etl.merger import DatasetMerger
-from masters_project.etl.solar import SolarProcessor
+from masters_project.etl.filters import drop_frozen, keep_daytime
 from masters_project.settings import settings
 
 settings.setup_logging("building_model_input")
@@ -66,7 +66,25 @@ def build_station_input(station: str) -> bool:
         logger.error(f"[{station}] SONDA file not found: {sonda_path}")
         return False
 
-    df_sonda = pd.read_csv(sonda_path)
+    df_sonda = pd.read_csv(sonda_path, parse_dates=["timestamp"])
+    df_sonda["timestamp"] = pd.to_datetime(df_sonda["timestamp"], utc=True)
+
+    # Filters act on the SONDA series at its native 1-minute resolution, before the join.
+    station_position = settings.stations[station]
+    filters = settings.etl.filters
+    df_sonda = keep_daytime(
+        df_sonda,
+        station_position.latitude,
+        station_position.longitude,
+        filters.min_solar_elevation,
+    )
+    df_sonda = drop_frozen(
+        df_sonda,
+        settings.etl.sonda.target_variable,
+        filters.frozen_min_run,
+        station_position.latitude,
+        station_position.longitude,
+    )
 
     logger.info(f"[{station}] Merging GOES features with SONDA ground targets...")
     df_final = DatasetMerger.join_by_columns(
@@ -75,17 +93,10 @@ def build_station_input(station: str) -> bool:
 
     initial_len = len(df_final)
     df_final = df_final.dropna().reset_index(drop=True)
-
-    logger.info(f"[{station}] Dropped {initial_len - len(df_final)} rows with NaNs.")
-
-    coordinates = settings.stations[station]
-    df_final = SolarProcessor.keep_daytime(
-        df_final,
-        lat=coordinates.latitude,
-        lon=coordinates.longitude,
-        min_elevation=settings.etl.min_solar_elevation,
+    logger.info(
+        f"[{station}] Final dataset ready: {len(df_final)} rows "
+        f"({initial_len - len(df_final)} dropped for NaNs)."
     )
-    logger.info(f"[{station}] Final dataset ready: {len(df_final)} rows.")
 
     CSVExporter().export(df_final, file_paths.model_input(station))
     return True

@@ -5,7 +5,7 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from masters_project.settings import GoesConfig, MlConfig, settings
+from masters_project.settings import FiltersConfig, GoesConfig, MlConfig, settings
 
 
 def test_pipeline_json_has_only_the_three_top_level_sections() -> None:
@@ -123,3 +123,20 @@ def test_pipeline_config_path_can_be_overridden_by_environment(tmp_path) -> None
         check=True,
     )
     assert result.stdout.strip() == "2031-05-06"
+
+
+def test_filters_default_to_disabled() -> None:
+    """With no ``filters`` section every filter is off (``None``)."""
+    filters = FiltersConfig()
+    assert filters.min_solar_elevation is None
+    assert filters.frozen_min_run is None
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("min_solar_elevation", 120), ("min_solar_elevation", -91), ("frozen_min_run", 1)],
+)
+def test_filters_reject_out_of_range_values(field: str, value: float) -> None:
+    """Failure mode: an impossible angle, or a run of 1 (every row), is rejected at load time."""
+    with pytest.raises(ValidationError, match=field):
+        FiltersConfig(**{field: value})

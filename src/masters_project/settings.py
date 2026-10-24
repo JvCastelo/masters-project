@@ -51,6 +51,16 @@ class StationSettings(BaseModel):
     longitude: float
 
 
+class FiltersConfig(BaseModel):
+    """Row filters applied when building the model input; ``None`` turns a filter off."""
+
+    # The 5 degrees in config/pipeline.json was chosen arbitrarily, not tuned or derived.
+    min_solar_elevation: float | None = Field(default=None, ge=-90, le=90)
+    # Consecutive identical daytime target samples that count as a frozen sensor. The
+    # 10 in config/pipeline.json leaves a margin over the longest natural run measured (5).
+    frozen_min_run: int | None = Field(default=None, ge=2)
+
+
 class EtlConfig(BaseModel):
     """ETL configuration: period, resources, stations, and the GOES/SONDA sources.
 
@@ -61,9 +71,7 @@ class EtlConfig(BaseModel):
     end_date: str
     max_workers: int = 12
     log_level: str = "INFO"
-    # Minimum solar elevation (degrees) for a row to enter the model input; None keeps the night.
-    # The value in config/pipeline.json (5) was chosen arbitrarily, not tuned or derived.
-    min_solar_elevation: float | None = Field(default=None, ge=-90, le=90)
+    filters: FiltersConfig = Field(default_factory=FiltersConfig)
     stations: dict[str, StationSettings]
     goes: GoesConfig
     sonda: SondaConfig
