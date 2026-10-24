@@ -1,8 +1,10 @@
 """Build merged model input per station: stack GOES channels, filter and join SONDA, drop NaNs, export CSV."""
 
+import argparse
 import logging
 import sys
 from collections import defaultdict
+from collections.abc import Sequence
 
 import pandas as pd
 
@@ -123,30 +125,75 @@ def build_station_input(station: str, goes_dir: str | None = None) -> bool:
     return True
 
 
-def build_model_input() -> int:
-    """Build the merged model input for every station in ``etl_config.stations``.
+def build_model_input(
+    stations: Sequence[str] | None = None, goes_dir: str | None = None
+) -> int:
+    """Build the model input of several stations, one after the other.
+
+    A station that cannot be built is logged and does not stop the others.
+
+    Args:
+        stations: Station keys to build; ``None`` means every station in ``etl_config.stations``.
+        goes_dir: Directory name inside ``data/raw/goes`` to read instead of the station's own.
+            Only meaningful for a single station, so it is rejected for several.
 
     Returns:
-        0 if every station was built, 1 if any station lacked its GOES or SONDA input.
+        0 if every station was built, 1 if any station lacked its GOES or SONDA input or
+        produced an invalid table.
+
+    Raises:
+        ValueError: If ``goes_dir`` is given for more than one station.
     """
-    failed = [s for s in settings.stations if not build_station_input(s)]
+    targets = list(stations) if stations else list(settings.stations)
+    if goes_dir is not None and len(targets) != 1:
+        raise ValueError(
+            "goes_dir applies to a single station; select it with --station."
+        )
+
+    failed = [s for s in targets if not build_station_input(s, goes_dir)]
     if failed:
         logger.error(f"Model input could not be built for: {failed}")
         return 1
     return 0
 
 
-def main() -> int:
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    """Command-line options of ``python -m masters_project.etl.build_dataset``."""
+    parser = argparse.ArgumentParser(
+        description="Build the model input: GOES features joined with the SONDA target."
+    )
+    parser.add_argument(
+        "--station",
+        choices=list(settings.stations),
+        help="build only this station (default: every station in etl_config.stations)",
+    )
+    parser.add_argument(
+        "--goes-dir",
+        metavar="NAME",
+        help="read the GOES CSVs from data/raw/goes/NAME instead of the station's own "
+        "directory (requires --station)",
+    )
+    args = parser.parse_args(argv)
+    if args.goes_dir and not args.station:
+        parser.error("--goes-dir requires --station")
+    return args
+
+
+def main(argv: Sequence[str] | None = None) -> int:
     """Build the model input inside its own run log (``data/logs/etl_build_dataset/``)."""
+    args = parse_args(argv)
     filters = settings.etl.filters
     with run_logging(
         "etl_build_dataset",
         period=f"{settings.etl.start_date}..{settings.etl.end_date}",
-        stations=list(settings.stations),
+        stations=[args.station] if args.station else list(settings.stations),
+        goes_dir=args.goes_dir or "<station>",
         min_solar_elevation=filters.min_solar_elevation,
         frozen_min_run=filters.frozen_min_run,
     ) as log:
-        log.exit_code = build_model_input()
+        log.exit_code = build_model_input(
+            [args.station] if args.station else None, args.goes_dir
+        )
     return log.exit_code
 
 

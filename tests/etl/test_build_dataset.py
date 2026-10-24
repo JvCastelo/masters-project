@@ -220,3 +220,102 @@ def test_empty_goes_directory_is_reported_as_no_files(
 
     assert build_dataset.build_station_input(STATION) is False
     assert "No GOES files found" in caplog.text
+
+
+# =============================================================================
+# command line
+# =============================================================================
+
+
+@pytest.fixture
+def two_stations(raw_inputs, monkeypatch: pytest.MonkeyPatch) -> None:
+    """OURINHOS has inputs; CACHOEIRA_PAULISTA is configured but has none."""
+    from masters_project.settings import StationSettings
+
+    monkeypatch.setattr(
+        settings.etl,
+        "stations",
+        {
+            **settings.etl.stations,
+            "CACHOEIRA_PAULISTA": StationSettings(latitude=-22.69, longitude=-45.006),
+        },
+    )
+    _filters(monkeypatch)
+
+
+def test_build_model_input_can_be_limited_to_some_stations(two_stations) -> None:
+    assert build_dataset.build_model_input([STATION]) == 0
+    assert file_paths.model_input(STATION).exists()
+    assert not file_paths.model_input("CACHOEIRA_PAULISTA").exists()
+
+
+def test_build_model_input_without_a_selection_builds_every_station(
+    two_stations,
+) -> None:
+    """The station without inputs fails the run, but OURINHOS is still built."""
+    assert build_dataset.build_model_input() == 1
+    assert file_paths.model_input(STATION).exists()
+
+
+def test_goes_dir_is_rejected_for_more_than_one_station(two_stations) -> None:
+    with pytest.raises(ValueError, match="single station"):
+        build_dataset.build_model_input(goes_dir="somewhere")
+
+
+def test_parse_args_defaults_to_every_station(two_stations) -> None:
+    args = build_dataset.parse_args([])
+    assert args.station is None and args.goes_dir is None
+
+
+def test_parse_args_accepts_a_station_and_a_goes_dir(two_stations) -> None:
+    args = build_dataset.parse_args(["--station", STATION, "--goes-dir", "experiment"])
+    assert (args.station, args.goes_dir) == (STATION, "experiment")
+
+
+def test_parse_args_goes_dir_requires_a_station(
+    two_stations, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit) as exit_info:
+        build_dataset.parse_args(["--goes-dir", "experiment"])
+    assert exit_info.value.code == 2
+    assert "--goes-dir requires --station" in capsys.readouterr().err
+
+
+def test_parse_args_rejects_a_station_that_is_not_configured(
+    two_stations, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit) as exit_info:
+        build_dataset.parse_args(["--station", "ATLANTIS"])
+    assert exit_info.value.code == 2
+    assert "invalid choice" in capsys.readouterr().err
+
+
+def test_main_builds_the_selected_station_and_writes_a_run_log(
+    two_stations, isolated_logs
+) -> None:
+    assert build_dataset.main(["--station", STATION]) == 0
+
+    assert file_paths.model_input(STATION).exists()
+    log = (isolated_logs / "etl_build_dataset" / "latest.log").read_text()
+    assert "stations: ['OURINHOS']" in log
+    assert "status=ok" in log and "exit_code=0" in log
+
+
+def test_main_reads_the_goes_dir_given_on_the_command_line(
+    two_stations, isolated_logs
+) -> None:
+    experiment = file_paths.raw_goes_dir(STATION, "ourinhos_experiment")
+    experiment.mkdir(parents=True)
+    _goes("C03", DAY[:3]).to_csv(
+        experiment / file_paths.raw_goes("C03", STATION).name, index=False
+    )
+
+    code = build_dataset.main(
+        ["--station", STATION, "--goes-dir", "ourinhos_experiment"]
+    )
+
+    assert code == 0 and len(_output()) == 3
+
+
+def test_main_exit_code_is_one_when_a_station_cannot_be_built(two_stations) -> None:
+    assert build_dataset.main([]) == 1
