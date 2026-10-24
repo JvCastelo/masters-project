@@ -1,4 +1,4 @@
-"""Build merged model input per station: stack GOES channels, join SONDA, drop NaNs, export CSV."""
+"""Build merged model input per station: stack GOES channels, join SONDA, drop NaNs, keep daytime, export CSV."""
 
 import logging
 import sys
@@ -10,6 +10,7 @@ from masters_project.enums import GoesChannelEnums
 from masters_project.file_paths import file_paths
 from masters_project.loaders.csv import CSVExporter
 from masters_project.processors.merger import DatasetMerger
+from masters_project.processors.solar import SolarProcessor
 from masters_project.settings import settings
 
 settings.setup_logging("building_model_input")
@@ -75,9 +76,16 @@ def build_station_input(station: str) -> bool:
     initial_len = len(df_final)
     df_final = df_final.dropna().reset_index(drop=True)
 
-    logger.info(
-        f"[{station}] Final dataset ready. Dropped {initial_len - len(df_final)} rows with NaNs."
+    logger.info(f"[{station}] Dropped {initial_len - len(df_final)} rows with NaNs.")
+
+    coordinates = settings.stations[station]
+    df_final = SolarProcessor.keep_daytime(
+        df_final,
+        lat=coordinates.latitude,
+        lon=coordinates.longitude,
+        min_elevation=settings.etl.min_solar_elevation,
     )
+    logger.info(f"[{station}] Final dataset ready: {len(df_final)} rows.")
 
     CSVExporter().export(df_final, file_paths.model_input(station))
     return True

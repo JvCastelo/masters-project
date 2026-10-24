@@ -5,7 +5,13 @@ import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from pydantic import BaseModel, ValidationError, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from masters_project.enums import GoesChannelEnums
 
@@ -55,6 +61,9 @@ class EtlConfig(BaseModel):
     end_date: str
     max_workers: int = 12
     log_level: str = "INFO"
+    # Minimum solar elevation (degrees) for a row to enter the model input; None keeps the night.
+    # The value in config/pipeline.json (5) was chosen arbitrarily, not tuned or derived.
+    min_solar_elevation: float | None = Field(default=None, ge=-90, le=90)
     stations: dict[str, StationSettings]
     goes: GoesConfig
     sonda: SondaConfig

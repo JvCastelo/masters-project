@@ -4,6 +4,7 @@
     "end_date": "2022-02-28",
     "max_workers": 24,
     "log_level": "INFO",
+    "min_solar_elevation": 5,
     "goes": {
       "bucket_name": "noaa-goes16",
       "product_name": "ABI-L1b-RadF",
