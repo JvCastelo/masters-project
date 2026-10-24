@@ -1,19 +1,31 @@
 # Masters Project
 
-A data pipeline that predicts ground solar radiation from **GOES-R** satellite imagery (NOAA, on AWS S3) and the **SONDA** ground-station network (INPE). It collects both sources, builds one ML-ready table per station, and trains and tunes models on it.
+A data pipeline that predicts ground solar radiation from **GOES-R** satellite imagery (NOAA, on AWS S3) and the **SONDA** ground-station network (INPE). It collects both sources, builds one ML-ready table per station, trains and tunes models on it, and evaluates the trained models (and ensembles of them) on another station or period.
 
 ## Overview
 
 ```
-SONDA ZIPs ──► etl.sonda ──► data/raw/sonda/*.csv ─┐
+SONDA ZIPs ──► etl.sonda ──► data/raw/sonda/<station>/*.csv ─┐
                                                     ├─► etl.build_dataset ──► data/processed/<station>/model_input_*.csv ──► ml.train / ml.tune ──► ml.predict ──► ml.plots
-GOES S3 ─────► etl.goes ───► data/raw/goes/*.csv ──┘
+GOES S3 ─────► etl.goes ───► data/raw/goes/<station>/*.csv ──┘
 ```
 
 1. **SONDA ETL** (`etl.sonda`): downloads the SONDA ZIP archives (by year or year-month) of every configured station, extracts the `.dat` files and exports one CSV per station with the target (`glo_avg`, W/m²). Run it **first**: it reports periods SONDA does not publish, and the GOES step uses it to skip days with no target.
 2. **GOES ETL** (`etl.goes`): reads GOES-R ABI NetCDF files from NOAA's Open Data Registry with partial range requests, extracts the pixel window of **all configured stations and channels** in one pass, caches it per day, and exports one CSV per channel and station.
 3. **Build model input** (`etl.build_dataset`): stacks the GOES channels, filters the SONDA target (daytime and frozen-sensor filters), joins both on timestamp, drops missing values, validates the result with pandera and writes the table the ML stage reads.
 4. **Training, tuning, prediction and plots** (`ml.train`, `ml.tune`, `ml.predict`, `ml.plots`): fit and evaluate the selected model on a training period for every station, search its hyperparameters, evaluate the trained models (and ensembles of them) on another station or period, and draw the comparison.
+
+| Command | Reads | Writes |
+|---|---|---|
+| `etl.sonda` | SONDA server | `data/raw/sonda/<station>/` |
+| `etl.goes` | NOAA S3 and the SONDA CSVs (to skip days without a target) | `data/raw/goes/<station>/`, `data/cache/goes/` |
+| `etl.build_dataset` | the GOES and SONDA CSVs of the station | `data/processed/<station>/model_input_*.csv` and its manifest |
+| `ml.train` | `model_input_*.csv` | `data/models/<station>/` (model and card), `data/results/<station>/..._metrics.json` |
+| `ml.tune` | `model_input_*.csv` | `data/results/<station>/..._tuning.json` |
+| `ml.predict` | the target station's `model_input_*.csv` and the trained models | `data/results/<target>/..._predictions.csv` and `..._metrics.json` |
+| `ml.plots` | the files `ml.predict` wrote | `data/results/<target>/*.png` |
+
+Every command writes its own log under `data/logs/<pipeline>/` (see [Logs](#logs)).
 
 `etl/` and `ml/` never import each other. Their only contract is the `model_input_*.csv` file, whose structure `etl/schemas.py` checks before it is written.
 
@@ -49,11 +61,11 @@ Edit `config/pipeline.json` before running the pipeline. It has three top-level 
 
 To run with a different configuration without editing this file, set `MASTERS_PIPELINE_CONFIG=/path/to/other.json` (same structure).
 
-There is no "selected station": GOES, SONDA, dataset building, training and tuning each process every station in `etl_config.stations` and write one output per station (the station name is part of the file name).
+There is no "selected station": GOES, SONDA, dataset building, training and tuning each process every station in `etl_config.stations` and write one output per station (the station name is part of the file name). The exceptions are `ml.predict` and `ml.plots`, which work on the one **target station** named in `ml_config.predict`, and `build_dataset --station`.
 
 ## Running the Pipeline
 
-Use the same date range in `etl_config` for GOES, SONDA, and downstream steps.
+Use the same date range in `etl_config` for GOES, SONDA, and `build_dataset`. The `ml` commands find the `model_input_*.csv` by that same range (it is part of the file name), so they need the config that built it; the days they train on are chosen separately by `ml_config.train`.
 
 ### 1. SONDA ground data (run first)
 
@@ -110,12 +122,13 @@ Applied to the SONDA series at its native 1-minute resolution, before the join (
 - **Structure** (violations raise `DataValidationError`, and the file is not written): expected columns, timezone-aware UTC timestamps that are unique and sorted, numeric target, no missing values and complete GOES windows (every channel has all `(2·radius+1)²` pixels) in the model input.
 - **Quality** (violations only log a warning with the offending range; the rows are kept): the target inside `[-100, 2000]` W/m². On the real data this flags exactly one thing: a defective Cachoeira Paulista sensor (2023-10-03 to 12, down to −765 W/m²). Isolated midday peaks up to 1657 W/m² are real cloud-enhancement events and are not flagged.
 
-### 4. Training, tuning and prediction
+### 4. Training, tuning, prediction and plots
 
 ```bash
 uv run python -m masters_project.ml.train      # one model per station
 uv run python -m masters_project.ml.tune       # search the hyperparameters
 uv run python -m masters_project.ml.predict    # evaluate trained models on another station/period
+uv run python -m masters_project.ml.plots      # draw the comparison
 ```
 
 Each model is a scikit-learn `Pipeline` (`StandardScaler`, then the estimator). Training and tuning build the **same** pipeline, so the scaler is part of every search. A new model is one entry in `ml/models.py` (`MODELS`: the estimator and its search space).
@@ -128,7 +141,7 @@ Each model is a scikit-learn `Pipeline` (`StandardScaler`, then the estimator). 
 
 `ml.tune` searches on the same training rows and writes `..._tuning.json`: the best parameters (ready to paste under `ml_config.models`) and the search space, `n_iter`, `cv`, `scoring` and dataset that produced them.
 
-Every `model_input_*.csv` has a manifest, `model_input_*.meta.json`: filters, period, rows, first/last timestamp, the CSV's sha256 and the git revision. A model card copies it, so the filters a model was trained with are never a guess.
+Every `model_input_*.csv` that `build_dataset` writes has a manifest, `model_input_*.meta.json`: filters, period, rows, first/last timestamp, the CSV's sha256 and the git revision. A model card copies it, so the filters a model was trained with are never a guess.
 
 **Predict.** `ml.predict` reads `ml_config.predict`. For the target station and period it loads the model trained on each listed station (the artifact of `ml_config.train`), predicts with the columns that model was trained on **selected by name**, builds each ensemble, and scores every model and ensemble against the observed target. Ensemble members are weighted by inverse distance to the target station (`idw`; with two members, `d2 / (d1 + d2)`) or equally (`equal`); the target station itself cannot be a member of an `idw` ensemble. It writes to the target station's results directory:
 
@@ -161,7 +174,9 @@ The figures are built with matplotlib's object API (no `pyplot`, no display), so
 
 1. Set the period and `etl_config.stations` in `pipeline.json` (only the stations you need for that period).
 2. Run the **SONDA ETL**, then the **GOES ETL**. A whole year can run at once: files are read with bounded memory and each channel and day is cached as soon as it finishes, so an interrupted run resumes where it stopped. List every channel you want in `goes.channels`.
-3. Run `build_dataset`, then training and tuning.
+3. Run `build_dataset` with the **full span** (see the note below). It overwrites the station's `model_input_*.csv`, so keep a copy of any version you still need: the file name does not say which filters built it, but its manifest does.
+4. Run `ml.train` (and `ml.tune` if you want to search hyperparameters). For an experiment that trains on one period and tests on another, put `ml_config.train` and `ml_config.predict` in a file under `config/experiments/` (see the example above) and point `MASTERS_PIPELINE_CONFIG` at it.
+5. Run `ml.predict`, then `ml.plots`.
 
 **Several periods (e.g. 2022 with three stations, then 2023 with one).** Collect each period with its own `start_date`/`end_date` and its own `etl_config.stations`. The GOES CSVs of every period in the station's directory are stacked by `build_dataset`, but the SONDA CSV is read **only for the configured span**, so rows of the other period would be silently dropped by the join. Before `build_dataset`, set `start_date`/`end_date` to the full span (e.g. `2022-01-01` to `2023-12-31`), run the SONDA ETL again (about a second per station-year) and then `build_dataset`. The GOES cache is reused for overlapping days, and a station with no GOES for a period simply contributes no rows for it.
 
@@ -175,8 +190,7 @@ data/
 │   ├── goes/<station>/      goes_<channel>_st_<start>_et_<end>_<STATION>.csv
 │   └── sonda/<station>/     sonda_<type>_st_<start>_et_<end>_<STATION>.csv
 ├── cache/goes/              listing, pixel and per-day caches (per channel and day; safe to delete, rebuilt from S3)
-├── processed/<station>/     model_input_st_<start>_et_<end>_<STATION>.csv
-├── processed/<station>/     ... and its manifest, model_input_*.meta.json
+├── processed/<station>/     model_input_st_<start>_et_<end>_<STATION>.csv and its manifest (.meta.json)
 ├── models/<station>/        <model>_st_<train period>_<STATION>_v1.joblib and its card (.json)
 ├── results/<station>/       ..._metrics.json, ..._tuning.json, <model>_predict_..._predictions.csv, ..._metrics.json, ..._*.png
 ├── logs/<pipeline>/         <YYYY-MM-DD_HHMMSS>.log, latest.log
@@ -188,7 +202,7 @@ data/
 
 ## Logs
 
-Every pipeline run writes its own file, `data/logs/<pipeline>/<YYYY-MM-DD_HHMMSS>.log` (`etl_sonda`, `etl_goes`, `etl_build_dataset`, `ml_train`, `ml_tune`), and the same lines go to the console. `latest.log` points to the newest one: `tail -f data/logs/etl_goes/latest.log`.
+Every pipeline run writes its own file, `data/logs/<pipeline>/<YYYY-MM-DD_HHMMSS>.log` (`etl_sonda`, `etl_goes`, `etl_build_dataset`, `ml_train`, `ml_tune`, `ml_predict`, `ml_plots`), and the same lines go to the console. `latest.log` points to the newest one: `tail -f data/logs/etl_goes/latest.log`.
 
 A run starts with a header (command, git revision with `-dirty` if tracked files changed, Python/pandas/numpy versions, config file, and a summary of period, stations, channels and thresholds) and ends with a footer (`status=ok|failed|interrupted`, duration, exit code), so a log says what produced it. An unhandled exception is logged at `CRITICAL` with its traceback before the program stops. Line format: `2026-10-24T16:33:28-0300 | INFO | masters_project.etl.build_dataset | message`.
 
