@@ -17,7 +17,8 @@ from masters_project.file_paths import file_paths
 from masters_project.logging_setup import run_logging
 from masters_project.settings import settings
 
-logger = logging.getLogger(__name__)
+# Run with ``python -m``, ``__name__`` is "__main__"; ``__spec__.name`` is the real module name.
+logger = logging.getLogger(__spec__.name if __spec__ else __name__)
 
 
 def build_station_input(station: str, goes_dir: str | None = None) -> bool:

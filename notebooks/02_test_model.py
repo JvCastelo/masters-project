@@ -20,20 +20,24 @@ os.chdir("..")
 print("Current Working Directory: ", os.getcwd())
 sns.set_theme(style="whitegrid")
 
+# Models, test data and outputs of this notebook are samples (trained on January only):
+# they live under data/samples, in the same station/stage layout as data/.
+SAMPLES = "data/samples"
+
 # %%
 model_cachoeira_paulista = joblib.load(
-    "data/models/knn_st_2022-01-01_et_2022-01-31_CACHOEIRA_PAULISTA_v1.joblib"
+    f"{SAMPLES}/models/cachoeira_paulista/knn_st_2022-01-01_et_2022-01-31_CACHOEIRA_PAULISTA_v1.joblib"
 )
 model_ourinhos = joblib.load(
-    "data/models/knn_st_2022-01-01_et_2022-01-31_OURINHOS_v1.joblib"
+    f"{SAMPLES}/models/ourinhos/knn_st_2022-01-01_et_2022-01-31_OURINHOS_v1.joblib"
 )
 model_sao_martinho_da_serra = joblib.load(
-    "data/models/knn_st_2022-01-01_et_2022-01-31_SAO_MARTINHO_DA_SERRA_v1.joblib"
+    f"{SAMPLES}/models/sao_martinho_da_serra/knn_st_2022-01-01_et_2022-01-31_SAO_MARTINHO_DA_SERRA_v1.joblib"
 )
 
 # %%
 df_input_test = pd.read_csv(
-    "data/processed/model_test_st_2023-01-01_et_2023-01-31_OURINHOS.csv"
+    f"{SAMPLES}/processed/ourinhos/model_test_st_2023-01-01_et_2023-01-31_OURINHOS.csv"
 )
 
 # Convert timestamp just to be safe for plotting
@@ -122,7 +126,7 @@ metricas = [
 ]
 
 df_metrics = pd.DataFrame(metricas)
-df_metrics.to_csv("data/results/test_metrics.csv", index=False)
+df_metrics.to_csv(f"{SAMPLES}/results/ourinhos/test_metrics.csv", index=False)
 
 # %%
 # %%
@@ -163,7 +167,9 @@ axes[-1].set_xlabel("Time", fontsize=12)
 
 # Adjust spacing, save, and show
 plt.tight_layout()
-plt.savefig("data/results/timeseries_result.png", dpi=300, bbox_inches="tight")
+plt.savefig(
+    f"{SAMPLES}/results/ourinhos/timeseries_result.png", dpi=300, bbox_inches="tight"
+)
 plt.show()
 
 # %%
@@ -197,6 +203,8 @@ for ax in axes:
 
 # BEST PRACTICE: tight_layout should go BEFORE savefig
 plt.tight_layout()
-plt.savefig("data/results/model_metrics.png", dpi=300, bbox_inches="tight")
+plt.savefig(
+    f"{SAMPLES}/results/ourinhos/model_metrics.png", dpi=300, bbox_inches="tight"
+)
 plt.show()
 # %%

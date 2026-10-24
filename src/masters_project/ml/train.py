@@ -13,7 +13,8 @@ from masters_project.ml.evaluate import evaluate_performance
 from masters_project.ml.factory import build_model
 from masters_project.settings import settings
 
-logger = logging.getLogger(__name__)
+# Run with ``python -m``, ``__name__`` is "__main__"; ``__spec__.name`` is the real module name.
+logger = logging.getLogger(__spec__.name if __spec__ else __name__)
 
 
 def train_station(station: str) -> None:

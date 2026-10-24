@@ -269,3 +269,18 @@ def test_git_revision_is_unknown_without_git(monkeypatch: pytest.MonkeyPatch) ->
 def test_format_duration_is_hours_minutes_seconds() -> None:
     assert logging_setup._format_duration(3725.9) == "01:02:05"
     assert logging_setup._format_duration(0) == "00:00:00"
+
+
+@pytest.mark.parametrize(
+    "module_name",
+    [
+        "masters_project.etl.build_dataset",
+        "masters_project.ml.train",
+        "masters_project.ml.tune",
+    ],
+)
+def test_entry_point_modules_log_under_their_real_name(module_name: str) -> None:
+    """Run with ``python -m`` these would be called ``__main__`` in every log line."""
+    import importlib
+
+    assert importlib.import_module(module_name).logger.name == module_name

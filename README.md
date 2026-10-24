@@ -64,7 +64,7 @@ uv run python -m masters_project.etl.sonda
 uv run python -m masters_project.etl.sonda --by month
 ```
 
-- One CSV per station. The log shows how many days have a valid target (e.g. `Days with a valid 'glo_avg': 196/365`).
+- One CSV per station, in `data/raw/sonda/<station>/`. The log shows how many days have a valid target (e.g. `Days with a valid 'glo_avg': 196/365`).
 - SONDA has real gaps (e.g. Ourinhos had no data from 2023-01-01 to 2023-01-22). A period that SONDA does not publish (HTTP 404) is reported as an error, the CSV is still written with the rest, and the command **exits with code 1**.
 - Before writing, the frame is [validated](#validation): a broken structure fails the station, while values outside a physical range only produce a warning (a defective sensor is a property of the data).
 
@@ -77,7 +77,7 @@ uv run python -m masters_project.etl.goes
 How it works:
 
 - **Only days with a target.** With `skip_days_without_target` the GOES days are limited to those on which at least one configured station has a valid SONDA value (those days would be dropped by the final join anyway). If a station's SONDA CSV is missing, every day is collected and a warning says so.
-- **All stations at once.** Each run extracts the pixel window of *every* station in `etl_config.stations` and writes one CSV per station. Reading other stations' pixels from a file that is already open is almost free, so the S3 cost is paid once per channel and period.
+- **All stations at once.** Each run extracts the pixel window of *every* station in `etl_config.stations` and writes one CSV per channel and station, in `data/raw/goes/<station>/`. Reading other stations' pixels from a file that is already open is almost free, so the S3 cost is paid once per channel and period.
 - **All channels in one run.** `etl_config.goes.channels` lists the channels to collect. Files are listed with one S3 call per day for all channels (instead of one per channel and day), days are listed in parallel, and listings of days that are already closed are cached in `data/cache/goes/listing/` (the NOAA archive does not change). The target pixels of each channel are cached in `data/cache/goes/pixels/`, so no file is opened just to locate stations.
 - **Per-day cache.** Results are stored in `data/cache/goes/{product}/{variable}_r{radius}/{channel}/{year}/{day}.csv`, one row per file and station, together with the target pixel. A day is saved once all its files finish, so an interrupted run only redoes the day in progress. Files that fail are retried on the next run. The cache does not depend on the dates, so overlapping periods reuse it.
 - **What the cache does and does not save.** It is a checkpoint and a memo for the *same channel and stations*: resuming after an interruption, repeating a run, overlapping periods, retrying failed files and re-exporting CSVs. It does **not** help a new channel (each `.nc` holds a single channel) or a new station: a cached file is skipped only if *every* station in `etl_config.stations` is present with the same target pixel, so adding or moving a station reads all the files of that channel again. Delete the cache folder to force a full re-read.
@@ -86,10 +86,14 @@ How it works:
 ### 3. Build merged model input
 
 ```bash
-uv run python -m masters_project.etl.build_dataset
+uv run python -m masters_project.etl.build_dataset                       # every station
+uv run python -m masters_project.etl.build_dataset --station OURINHOS    # one station
+uv run python -m masters_project.etl.build_dataset --station OURINHOS --goes-dir ourinhos_experiment
 ```
 
-It reads the GOES CSVs found **directly** in `data/raw/goes/` (not in subfolders) whose name ends with `_{STATION}.csv`, so CSVs of several periods are stacked and repeated timestamps dropped.
+Each station is built from its own directory, `data/raw/goes/<station>/` (the lower-case station key, e.g. `ourinhos`), using the files named `goes_<channel>_..._<STATION>.csv`; CSVs of several periods are stacked and repeated timestamps dropped. `--goes-dir NAME` reads `data/raw/goes/NAME/` instead (it requires `--station`), which lets you build from a different set of CSVs without moving files. A missing directory is logged with the path that was expected and the command exits with code 1.
+
+The result does not depend on the order in which the file system lists the files: channels come out as `C01`..`C16`, and when two scans round to the same 10-minute timestamp the one from the later period wins. (A dataset built before 2026-10-24 has its channel columns in the file system's arbitrary order, different for each station, so a model fitted on it needs its columns selected by name.)
 
 #### Filters
 
@@ -120,19 +124,34 @@ Both fit one model per station on a chronological split (no shuffling, so the te
 2. Run the **SONDA ETL**, then the **GOES ETL**. A whole year can run at once: files are read with bounded memory and each channel and day is cached as soon as it finishes, so an interrupted run resumes where it stopped. List every channel you want in `goes.channels`.
 3. Run `build_dataset`, then training and tuning.
 
-**Several periods (e.g. 2022 with three stations, then 2023 with one).** Collect each period with its own `start_date`/`end_date` and its own `etl_config.stations`. The GOES CSVs of every period are stacked by file name in `build_dataset`, but the SONDA CSV is read **only for the configured span**, so rows of the other period would be silently dropped by the join. Before `build_dataset`, set `start_date`/`end_date` to the full span (e.g. `2022-01-01` to `2023-12-31`), run the SONDA ETL again (about a second per station-year) and then `build_dataset`. The GOES cache is reused for overlapping days, and a station with no GOES for a period simply contributes no rows for it.
+**Several periods (e.g. 2022 with three stations, then 2023 with one).** Collect each period with its own `start_date`/`end_date` and its own `etl_config.stations`. The GOES CSVs of every period in the station's directory are stacked by `build_dataset`, but the SONDA CSV is read **only for the configured span**, so rows of the other period would be silently dropped by the join. Before `build_dataset`, set `start_date`/`end_date` to the full span (e.g. `2022-01-01` to `2023-12-31`), run the SONDA ETL again (about a second per station-year) and then `build_dataset`. The GOES cache is reused for overlapping days, and a station with no GOES for a period simply contributes no rows for it.
 
 ## Outputs
 
-Under `data/` (git-ignored):
+Everything that belongs to one station lives in a directory named after it (lower-case station key), below the stage directory. File names keep the station and the period, so a copied file still says what it is. Under `data/` (git-ignored):
 
-- `data/raw/goes/` — GOES per-channel, per-station CSVs
-- `data/cache/goes/` — GOES listing, pixel and per-day caches (safe to delete; rebuilt from S3)
-- `data/raw/sonda/` — SONDA CSV per station
-- `data/processed/` — Merged model input CSV per station (`model_input_*_{STATION}.csv`)
-- `data/models/` — Saved joblib models (one per station)
-- `data/results/` — Metrics and tuning JSON reports (one per station)
-- `data/logs/` — Pipeline logs (rotated at 10 MB, 5 backups; INFO level unless `log_level` is `DEBUG`)
+```
+data/
+├── raw/
+│   ├── goes/<station>/      goes_<channel>_st_<start>_et_<end>_<STATION>.csv
+│   └── sonda/<station>/     sonda_<type>_st_<start>_et_<end>_<STATION>.csv
+├── cache/goes/              listing, pixel and per-day caches (per channel and day; safe to delete, rebuilt from S3)
+├── processed/<station>/     model_input_st_<start>_et_<end>_<STATION>.csv
+├── models/<station>/        <model>_st_..._<STATION>_v1.joblib
+├── results/<station>/       <model>_st_..._<STATION>_v1_metrics.json, ..._tuning.json
+├── logs/<pipeline>/         <YYYY-MM-DD_HHMMSS>.log, latest.log
+└── samples/                 tests, samples and experiments, in the same tree (kept apart from the real runs)
+```
+
+`raw/` and `processed/` hold only complete collection periods; anything that is a test or a sample (single months, January slices, models trained on them, notebook outputs) goes under `data/samples/`.
+
+## Logs
+
+Every pipeline run writes its own file, `data/logs/<pipeline>/<YYYY-MM-DD_HHMMSS>.log` (`etl_sonda`, `etl_goes`, `etl_build_dataset`, `ml_train`, `ml_tune`), and the same lines go to the console. `latest.log` points to the newest one: `tail -f data/logs/etl_goes/latest.log`.
+
+A run starts with a header (command, git revision with `-dirty` if tracked files changed, Python/pandas/numpy versions, config file, and a summary of period, stations, channels and thresholds) and ends with a footer (`status=ok|failed|interrupted`, duration, exit code), so a log says what produced it. An unhandled exception is logged at `CRITICAL` with its traceback before the program stops. Line format: `2026-10-24T16:33:28-0300 | INFO | masters_project.etl.build_dataset | message`.
+
+Levels: `INFO` marks the milestones of a stage; `DEBUG` is per-file detail and is written only when `etl_config.log_level` is `DEBUG`; `WARNING` is a recoverable data problem (a gap in the source, a defective sensor, dropped rows); `ERROR` is one unit (a station, a day, a file) that failed while the run goes on. A single file rotates at 10 MB, so a long `DEBUG` run cannot fill the disk. Old logs are not deleted automatically.
 
 ## Project Structure
 
@@ -141,8 +160,9 @@ masters_project/
 ├── config/pipeline.json
 ├── notebooks/                  # exploratory analysis (needs --group notebooks)
 ├── src/masters_project/
-│   ├── settings.py             # pydantic config, paths, logging
-│   ├── file_paths.py           # canonical output paths
+│   ├── settings.py             # pydantic config and project paths
+│   ├── logging_setup.py        # one log file per run, with header and footer
+│   ├── file_paths.py           # canonical paths, one directory per station
 │   ├── enums.py                # SondaStation, GoesChannel
 │   ├── exporters.py            # CSV and JSON writers
 │   ├── utils.py                # time_track decorator
@@ -167,7 +187,7 @@ uv run ruff check src tests     # lint
 uv run ruff format src tests    # format
 ```
 
-Tests never touch `data/`: `tests/conftest.py` points every path in `settings` at a temporary directory, and S3, the SONDA server and the GOES process pool are replaced by fakes.
+Tests never touch `data/`: `tests/conftest.py` points every path in `settings` (including the logs) at a temporary directory, and S3, the SONDA server and the GOES process pool are replaced by fakes.
 
 ## License
 
