@@ -1,0 +1,75 @@
+import logging
+from typing import Any
+
+import numpy as np
+from numpy.typing import ArrayLike
+from sklearn.metrics import (
+    mean_absolute_error,
+    mean_absolute_percentage_error,
+    r2_score,
+    root_mean_squared_error,
+)
+
+from masters_project.file_paths import file_paths
+from masters_project.exporters import JSONExporter
+from masters_project.settings import settings
+
+logger = logging.getLogger(__name__)
+
+METRIC_REGISTRY = {
+    "rmse": root_mean_squared_error,
+    "r2": r2_score,
+    "mae": mean_absolute_error,
+    "mbe": lambda y_target, y_predicted: np.mean(y_predicted - y_target),
+    "mape": mean_absolute_percentage_error,
+}
+
+
+def evaluate_performance(
+    y_target: ArrayLike, y_predicted: ArrayLike, model_name: str, station: str
+) -> None:
+    """Compute configured sklearn metrics and write results to JSON via :class:`JSONExporter`.
+
+    Metrics are selected from ``settings.ml.evaluation_metrics``; unsupported names are
+    skipped with a warning.
+
+    Args:
+        y_target: Ground-truth target values (array-like).
+        y_predicted: Model predictions (array-like, same length as ``y_target``).
+        model_name: Label stored in the output JSON under ``model_type``.
+        station: Station key; stored in the JSON and used in the output file name.
+
+    Note:
+        Writes to ``file_paths.model_metrics(station, model_name, \"v1\")``. Does not return
+        the metrics dict (side effect only).
+    """
+    logger.info("Calculating requested performance metrics...")
+
+    results: dict[str, Any] = {
+        "model_type": model_name,
+        "station": station,
+        "start_date": settings.etl.start_date,
+        "end_date": settings.etl.end_date,
+    }
+
+    requested_metrics = settings.ml.evaluation_metrics
+
+    for metric_name in requested_metrics:
+        metric_key = metric_name.lower()
+
+        if metric_key in METRIC_REGISTRY:
+            metric_function = METRIC_REGISTRY[metric_key]
+            score = metric_function(y_target, y_predicted)
+            results[metric_key] = round(score, 3)
+        else:
+            logger.warning(
+                f"Metric '{metric_name}' is not supported in the registry. Skipping."
+            )
+
+    logger.info(f"FINAL RESULTS: {results}")
+
+    output_path = file_paths.model_metrics(station, model_name, "v1")
+    exporter = JSONExporter()
+    exporter.export(results, output_path)
+
+    logger.info(f"Metrics report saved to {output_path}")
