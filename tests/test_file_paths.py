@@ -39,18 +39,28 @@ def test_model_input_under_processed_with_expected_prefix() -> None:
     assert path.name.endswith(f"_{STATION}.csv")
 
 
-def test_model_save_and_model_metrics_suffixes() -> None:
-    """model_save uses .joblib under models; model_metrics uses _metrics.json under results."""
-    save_path = file_paths.model_save(STATION, "KNN", version="v1")
+def test_model_paths_carry_the_training_period_not_the_etl_period() -> None:
+    """A model trained on 2022 must say so, whatever span the ETL config covers."""
+    save_path = file_paths.model_save(STATION, "KNN", "2022-01-01", "2022-12-31")
     assert save_path.parent == settings.MODELS_PATH / "ourinhos"
-    assert save_path.suffix == ".joblib"
-    assert "knn_" in save_path.name.lower()
-    assert STATION in save_path.name
+    assert save_path.name == "knn_st_2022-01-01_et_2022-12-31_OURINHOS_v1.joblib"
 
-    metrics_path = file_paths.model_metrics(STATION, "KNN", version="v1")
-    assert metrics_path.parent == settings.RESULTS_PATH / "ourinhos"
-    assert metrics_path.name.endswith("_metrics.json")
-    assert STATION in metrics_path.name
+    metrics = file_paths.model_metrics(STATION, "KNN", "2022-01-01", "2022-12-31")
+    assert metrics.parent == settings.RESULTS_PATH / "ourinhos"
+    assert metrics.name == "knn_st_2022-01-01_et_2022-12-31_OURINHOS_v1_metrics.json"
+
+
+def test_the_model_version_is_part_of_the_name() -> None:
+    path = file_paths.model_save(STATION, "KNN", "2022-01-01", "2022-12-31", "v2")
+    assert path.name.endswith("_OURINHOS_v2.joblib")
+
+
+def test_model_input_manifest_sits_beside_the_csv() -> None:
+    csv = file_paths.model_input(STATION)
+    manifest = file_paths.model_input_manifest(STATION)
+
+    assert manifest.parent == csv.parent
+    assert manifest.name == csv.name.removesuffix(".csv") + ".meta.json"
 
 
 def test_goes_cache_day_is_independent_of_period_and_station() -> None:
@@ -78,11 +88,10 @@ def test_goes_listing_and_pixel_caches_live_under_cache_goes() -> None:
 
 
 def test_model_tuning_path_has_the_tuning_suffix_under_results() -> None:
-    path = file_paths.model_tuning("OURINHOS", "KNN", "v2")
+    path = file_paths.model_tuning("OURINHOS", "KNN", "2022-01-01", "2022-12-31", "v2")
 
     assert path.parent == settings.RESULTS_PATH / "ourinhos"
-    assert path.name.startswith("knn_st_")
-    assert path.name.endswith("_OURINHOS_v2_tuning.json")
+    assert path.name == "knn_st_2022-01-01_et_2022-12-31_OURINHOS_v2_tuning.json"
 
 
 @pytest.mark.parametrize(
@@ -102,9 +111,10 @@ def test_every_per_station_path_lives_under_the_same_station_directory() -> None
         file_paths.raw_goes("C03", STATION),
         file_paths.raw_sonda(STATION),
         file_paths.model_input(STATION),
-        file_paths.model_save(STATION, "KNN"),
-        file_paths.model_metrics(STATION, "KNN"),
-        file_paths.model_tuning(STATION, "KNN"),
+        file_paths.model_input_manifest(STATION),
+        file_paths.model_save(STATION, "KNN", "2022-01-01", "2022-12-31"),
+        file_paths.model_metrics(STATION, "KNN", "2022-01-01", "2022-12-31"),
+        file_paths.model_tuning(STATION, "KNN", "2022-01-01", "2022-12-31"),
     ]
     assert all(path.parent.name == "ourinhos" for path in paths)
 

@@ -145,67 +145,105 @@ class FilePathBuilder:
         return settings.PROCESSED_PATH / FilePathBuilder.station_dir(station) / filename
 
     @staticmethod
-    def model_save(station: str, model_name: str, version: str = "v1") -> Path:
-        """Path for a trained model bundle (joblib), in the station's models directory.
+    def model_input_manifest(station: str) -> Path:
+        """Path of the manifest written next to the model input (filters, hash, commit...)."""
+        return FilePathBuilder.model_input(station).with_suffix(".meta.json")
+
+    @staticmethod
+    def _model_stem(
+        station: str, model_name: str, start_date: str, end_date: str, version: str
+    ) -> str:
+        return f"{model_name.lower()}_st_{start_date}_et_{end_date}_{station}_{version}"
+
+    @staticmethod
+    def model_save(
+        station: str,
+        model_name: str,
+        start_date: str,
+        end_date: str,
+        version: str = "v1",
+    ) -> Path:
+        """Path for a trained model (joblib), in the station's models directory.
+
+        The name carries the period the model was **trained** on, which may be narrower than
+        the ETL period. The model card is the sibling file with the ``.json`` suffix.
 
         Args:
             station: Station key (a key of ``etl_config.stations``).
             model_name: Model identifier (e.g. ``\"KNN\"``); stored lowercased in filename.
+            start_date: First day of the training period.
+            end_date: Last day of the training period.
             version: Version tag suffix (default ``\"v1\"``).
 
         Returns:
-            Path ``models/<station>/{model}_st_..._{station}_{version}.joblib``.
+            Path ``models/<station>/{model}_st_{start}_et_{end}_{station}_{version}.joblib``.
         """
-        filename = (
-            f"{model_name.lower()}_"
-            f"st_{settings.etl.start_date}_"
-            f"et_{settings.etl.end_date}_"
-            f"{station}_{version}.joblib"
+        stem = FilePathBuilder._model_stem(
+            station, model_name, start_date, end_date, version
+        )
+        return (
+            settings.MODELS_PATH
+            / FilePathBuilder.station_dir(station)
+            / f"{stem}.joblib"
         )
 
-        return settings.MODELS_PATH / FilePathBuilder.station_dir(station) / filename
-
     @staticmethod
-    def model_metrics(station: str, model_name: str, version: str = "v1") -> Path:
-        """Path for evaluation metrics JSON, in the station's results directory.
+    def model_metrics(
+        station: str,
+        model_name: str,
+        start_date: str,
+        end_date: str,
+        version: str = "v1",
+    ) -> Path:
+        """Path for the evaluation report of a trained model, in the station's results directory.
 
         Args:
             station: Station key (a key of ``etl_config.stations``).
             model_name: Model identifier; stored lowercased in filename.
+            start_date: First day of the training period.
+            end_date: Last day of the training period.
             version: Version tag suffix (default ``\"v1\"``).
 
         Returns:
             Path ``results/<station>/..._metrics.json``.
         """
-        filename = (
-            f"{model_name.lower()}_"
-            f"st_{settings.etl.start_date}_"
-            f"et_{settings.etl.end_date}_"
-            f"{station}_{version}_metrics.json"
+        stem = FilePathBuilder._model_stem(
+            station, model_name, start_date, end_date, version
+        )
+        return (
+            settings.RESULTS_PATH
+            / FilePathBuilder.station_dir(station)
+            / f"{stem}_metrics.json"
         )
 
-        return settings.RESULTS_PATH / FilePathBuilder.station_dir(station) / filename
-
     @staticmethod
-    def model_tuning(station: str, model_name: str, version: str = "v1") -> Path:
+    def model_tuning(
+        station: str,
+        model_name: str,
+        start_date: str,
+        end_date: str,
+        version: str = "v1",
+    ) -> Path:
         """Path for hyperparameter tuning results JSON, in the station's results directory.
 
         Args:
             station: Station key (a key of ``etl_config.stations``).
             model_name: Model identifier; stored lowercased in filename.
+            start_date: First day of the period the search ran on.
+            end_date: Last day of that period.
             version: Version tag suffix (default ``\"v1\"``).
 
         Returns:
             Path ``results/<station>/..._tuning.json``.
         """
-        filename = (
-            f"{model_name.lower()}_"
-            f"st_{settings.etl.start_date}_"
-            f"et_{settings.etl.end_date}_"
-            f"{station}_{version}_tuning.json"
+        stem = FilePathBuilder._model_stem(
+            station, model_name, start_date, end_date, version
         )
-
-        return settings.RESULTS_PATH / FilePathBuilder.station_dir(station) / filename
+        return (
+            settings.RESULTS_PATH
+            / FilePathBuilder.station_dir(station)
+            / f"{stem}_tuning.json"
+        )
 
 
 file_paths = FilePathBuilder()

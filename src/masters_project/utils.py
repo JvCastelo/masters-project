@@ -1,9 +1,12 @@
 """Small shared helpers."""
 
+import hashlib
 import logging
 import time
 from collections.abc import Callable
+from datetime import UTC, datetime
 from functools import wraps
+from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -33,3 +36,17 @@ def time_track(func: Callable[..., Any]) -> Callable[..., Any]:
         return result
 
     return wrapper
+
+
+def file_sha256(path: Path) -> str:
+    """SHA-256 of a file, read in blocks so a large CSV is never loaded whole."""
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for block in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def utc_now_iso() -> str:
+    """Current time as an ISO-8601 UTC string, to stamp metadata."""
+    return datetime.now(UTC).isoformat(timespec="seconds")

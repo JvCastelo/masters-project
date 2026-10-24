@@ -133,3 +133,32 @@ def test_unusable_config_file_exits_with_code_1(
 
     assert exit_info.value.code == 1
     assert message in capsys.readouterr().out
+
+
+def test_period_config_rejects_a_start_after_the_end() -> None:
+    from masters_project.settings import PeriodConfig
+
+    with pytest.raises(ValidationError, match="is after end_date"):
+        PeriodConfig(start_date="2023-01-01", end_date="2022-12-31")
+
+
+def test_period_config_rejects_a_date_that_is_not_iso() -> None:
+    from masters_project.settings import PeriodConfig
+
+    with pytest.raises(ValidationError):
+        PeriodConfig(start_date="01/01/2022", end_date="2022-12-31")
+
+
+def test_train_period_is_the_configured_one_or_else_the_etl_period(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from masters_project.settings import PeriodConfig
+
+    configured = PeriodConfig(start_date="2022-01-01", end_date="2022-12-31")
+    monkeypatch.setattr(settings.ml, "train", configured)
+    assert settings.train_period == configured
+
+    monkeypatch.setattr(settings.ml, "train", None)
+    assert settings.train_period == PeriodConfig(
+        start_date=settings.etl.start_date, end_date=settings.etl.end_date
+    )

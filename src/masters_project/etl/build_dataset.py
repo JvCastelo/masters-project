@@ -12,13 +12,42 @@ from masters_project.enums import GoesChannel
 from masters_project.etl.filters import drop_frozen, keep_daytime
 from masters_project.etl.merger import DatasetMerger
 from masters_project.etl.schemas import DataValidationError, validate_model_input
-from masters_project.exporters import CSVExporter
+from masters_project.exporters import CSVExporter, JSONExporter
 from masters_project.file_paths import file_paths
-from masters_project.logging_setup import run_logging
+from masters_project.logging_setup import git_revision, run_logging
 from masters_project.settings import settings
+from masters_project.utils import file_sha256, utc_now_iso
 
 # Run with ``python -m``, ``__name__`` is "__main__"; ``__spec__.name`` is the real module name.
 logger = logging.getLogger(__spec__.name if __spec__ else __name__)
+
+
+def write_manifest(station: str, df: pd.DataFrame, goes_dir: str | None) -> None:
+    """Record next to the model input how it was built: filters, hash, revision and extent.
+
+    The file name of the CSV does not say which filters were applied, and a model fitted on it
+    later needs to know. The manifest sits beside the CSV as ``<name>.meta.json``.
+    """
+    JSONExporter().export(
+        {
+            "station": station,
+            "period": {
+                "start_date": settings.etl.start_date,
+                "end_date": settings.etl.end_date,
+            },
+            "target": settings.etl.sonda.target_variable,
+            "filters": settings.etl.filters.model_dump(),
+            "goes_dir": goes_dir or file_paths.station_dir(station),
+            "rows": len(df),
+            "columns": len(df.columns),
+            "first_timestamp": df["timestamp"].min().isoformat(),
+            "last_timestamp": df["timestamp"].max().isoformat(),
+            "csv_sha256": file_sha256(file_paths.model_input(station)),
+            "git_revision": git_revision(),
+            "created_at": utc_now_iso(),
+        },
+        file_paths.model_input_manifest(station),
+    )
 
 
 def build_station_input(station: str, goes_dir: str | None = None) -> bool:
@@ -125,7 +154,10 @@ def build_station_input(station: str, goes_dir: str | None = None) -> bool:
         logger.exception(f"[{station}] The model input is not valid; not written.")
         return False
 
-    CSVExporter().export(df_final, file_paths.model_input(station))
+    output = file_paths.model_input(station)
+    CSVExporter().export(df_final, output)
+    if output.exists():
+        write_manifest(station, df_final, goes_dir)
     return True
 
 

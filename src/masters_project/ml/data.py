@@ -1,4 +1,4 @@
-"""Load processed model input CSV and produce chronological train/test splits."""
+"""Load a station's model input, pick the training period and split it chronologically."""
 
 import logging
 
@@ -16,8 +16,39 @@ def load_model_input_data(station: str) -> pd.DataFrame:
     data_path = file_paths.model_input(station)
     logger.info(f"Loading data from {data_path}")
 
-    df = pd.read_csv(data_path, parse_dates=["timestamp"])
+    df = pd.read_csv(data_path)
+    df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
     return df.sort_values("timestamp").reset_index(drop=True)
+
+
+def select_period(df: pd.DataFrame, start_date: str, end_date: str) -> pd.DataFrame:
+    """Rows from ``start_date`` 00:00 to ``end_date`` 23:59:59 (UTC), both days included."""
+    first = pd.Timestamp(start_date, tz="UTC")
+    last = pd.Timestamp(end_date, tz="UTC") + pd.Timedelta(days=1)
+    kept = df[(df["timestamp"] >= first) & (df["timestamp"] < last)]
+    return kept.reset_index(drop=True)
+
+
+def training_frame(station: str) -> pd.DataFrame:
+    """The station's model input restricted to the training period (``settings.train_period``).
+
+    Raises:
+        ValueError: If the model input has no rows in that period.
+    """
+    period = settings.train_period
+    frame = select_period(
+        load_model_input_data(station), period.start_date, period.end_date
+    )
+    if frame.empty:
+        raise ValueError(
+            f"[{station}] The model input has no rows between {period.start_date} "
+            f"and {period.end_date}."
+        )
+    logger.info(
+        f"[{station}] Training period {period.start_date}..{period.end_date}: "
+        f"{len(frame)} rows."
+    )
+    return frame
 
 
 def get_train_test_splits(

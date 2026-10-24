@@ -3,6 +3,7 @@
 import json
 import os
 import sys
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -78,11 +79,33 @@ class EtlConfig(BaseModel):
     sonda: SondaConfig
 
 
+class PeriodConfig(BaseModel):
+    """An inclusive range of days, ``YYYY-MM-DD``."""
+
+    start_date: str
+    end_date: str
+
+    @model_validator(mode="after")
+    def _start_is_not_after_end(self) -> "PeriodConfig":
+        start, end = (
+            date.fromisoformat(self.start_date),
+            date.fromisoformat(self.end_date),
+        )
+        if start > end:
+            raise ValueError(
+                f"start_date {self.start_date} is after end_date {self.end_date}."
+            )
+        return self
+
+
 class MlConfig(BaseModel):
     """Machine learning configuration, including which model the pipelines run."""
 
     selected_model: str
+    #: Fraction of the training period held out (the most recent days) to evaluate the model.
     test_size: float
+    #: Period of the model input used to train and tune; ``None`` uses the whole dataset.
+    train: PeriodConfig | None = None
     evaluation_metrics: list[str]
     #: Model name -> constructor arguments of its estimator (see ``masters_project.ml.models``).
     models: dict[str, dict[str, Any]]
@@ -180,6 +203,13 @@ class Settings:
     def stations(self) -> dict[str, StationSettings]:
         """All configured stations (name -> coordinates); every pipeline step runs for each."""
         return self.etl.stations
+
+    @property
+    def train_period(self) -> PeriodConfig:
+        """Days used to train and tune: ``ml_config.train``, else the whole ETL period."""
+        return self.ml.train or PeriodConfig(
+            start_date=self.etl.start_date, end_date=self.etl.end_date
+        )
 
     @property
     def model(self) -> dict[str, Any]:

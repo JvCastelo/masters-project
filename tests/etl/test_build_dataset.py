@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import json
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -380,3 +382,75 @@ def test_the_later_period_wins_a_timestamp_present_in_two_files(
 
     row = _output().loc[lambda df: df["timestamp"] == pd.Timestamp(DAY[0], tz="UTC")]
     assert (row["radius=1_C03_11"] == 999.0).all()
+
+
+# =============================================================================
+# manifest
+# =============================================================================
+
+
+def _manifest() -> dict:
+    return json.loads(file_paths.model_input_manifest(STATION).read_text())
+
+
+def test_the_manifest_records_how_the_model_input_was_built(
+    raw_inputs, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from masters_project.utils import file_sha256
+
+    _filters(monkeypatch, min_solar_elevation=5, frozen_min_run=10)
+
+    build_dataset.build_station_input(STATION)
+
+    manifest = _manifest()
+    assert manifest["station"] == STATION
+    assert manifest["filters"] == {"min_solar_elevation": 5.0, "frozen_min_run": 10}
+    assert manifest["period"] == {"start_date": "2022-06-21", "end_date": "2022-06-21"}
+    assert manifest["target"] == "glo_avg"
+    assert manifest["goes_dir"] == "ourinhos"
+    assert manifest["rows"] == len(_output()) == 6
+    assert manifest["first_timestamp"].startswith("2022-06-21T15:00")
+    assert manifest["last_timestamp"].startswith("2022-06-21T15:50")
+    assert manifest["csv_sha256"] == file_sha256(file_paths.model_input(STATION))
+    assert {"git_revision", "created_at"} <= set(manifest)
+
+
+def test_the_manifest_says_when_no_filter_was_applied(
+    raw_inputs, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _filters(monkeypatch)
+
+    build_dataset.build_station_input(STATION)
+
+    assert _manifest()["filters"] == {
+        "min_solar_elevation": None,
+        "frozen_min_run": None,
+    }
+
+
+def test_the_manifest_names_the_directory_given_with_goes_dir(
+    raw_inputs, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _filters(monkeypatch)
+    experiment = file_paths.raw_goes_dir(STATION, "ourinhos_experiment")
+    experiment.mkdir(parents=True)
+    _goes("C03", DAY[:3]).to_csv(
+        experiment / file_paths.raw_goes("C03", STATION).name, index=False
+    )
+
+    build_dataset.build_station_input(STATION, goes_dir="ourinhos_experiment")
+
+    assert _manifest()["goes_dir"] == "ourinhos_experiment"
+
+
+def test_no_manifest_is_written_when_the_input_is_invalid(
+    raw_inputs, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _filters(monkeypatch)
+    _goes("C03", NIGHT + DAY, drop="radius=1_C03_11").to_csv(
+        file_paths.raw_goes("C03", STATION), index=False
+    )
+
+    build_dataset.build_station_input(STATION)
+
+    assert not file_paths.model_input_manifest(STATION).exists()

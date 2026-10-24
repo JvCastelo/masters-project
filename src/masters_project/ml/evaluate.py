@@ -1,6 +1,8 @@
-"""Score predictions with the configured metrics and write the JSON report of a station."""
+"""Score predictions with the configured metrics and write the JSON report of a run."""
 
 import logging
+from collections.abc import Sequence
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -13,7 +15,6 @@ from sklearn.metrics import (
 )
 
 from masters_project.exporters import JSONExporter
-from masters_project.file_paths import file_paths
 from masters_project.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -27,51 +28,35 @@ METRIC_REGISTRY = {
 }
 
 
-def evaluate_performance(
-    y_target: ArrayLike, y_predicted: ArrayLike, model_name: str, station: str
-) -> None:
-    """Compute configured sklearn metrics and write results to JSON via :class:`JSONExporter`.
-
-    Metrics are selected from ``settings.ml.evaluation_metrics``; unsupported names are
-    skipped with a warning.
+def compute_metrics(
+    y_target: ArrayLike,
+    y_predicted: ArrayLike,
+    names: Sequence[str] | None = None,
+) -> dict[str, float]:
+    """Compute metrics of predictions against the observed values.
 
     Args:
         y_target: Ground-truth target values (array-like).
         y_predicted: Model predictions (array-like, same length as ``y_target``).
-        model_name: Label stored in the output JSON under ``model_type``.
-        station: Station key; stored in the JSON and used in the output file name.
+        names: Metrics to compute; defaults to ``ml_config.evaluation_metrics``. Names are
+            case-insensitive and an unsupported one is skipped with a warning.
 
-    Note:
-        Writes to ``file_paths.model_metrics(station, model_name, \"v1\")``. Does not return
-        the metrics dict (side effect only).
+    Returns:
+        Metric name (lower case) -> value rounded to 3 decimals.
     """
-    logger.info("Calculating requested performance metrics...")
-
-    results: dict[str, Any] = {
-        "model_type": model_name,
-        "station": station,
-        "start_date": settings.etl.start_date,
-        "end_date": settings.etl.end_date,
-    }
-
-    requested_metrics = settings.ml.evaluation_metrics
-
-    for metric_name in requested_metrics:
-        metric_key = metric_name.lower()
-
-        if metric_key in METRIC_REGISTRY:
-            metric_function = METRIC_REGISTRY[metric_key]
-            score = metric_function(y_target, y_predicted)
-            results[metric_key] = round(score, 3)
+    results: dict[str, float] = {}
+    for metric_name in names if names is not None else settings.ml.evaluation_metrics:
+        key = metric_name.lower()
+        if key in METRIC_REGISTRY:
+            results[key] = round(float(METRIC_REGISTRY[key](y_target, y_predicted)), 3)
         else:
             logger.warning(
                 f"Metric '{metric_name}' is not supported in the registry. Skipping."
             )
+    return results
 
-    logger.info(f"FINAL RESULTS: {results}")
 
-    output_path = file_paths.model_metrics(station, model_name, "v1")
-    exporter = JSONExporter()
-    exporter.export(results, output_path)
-
-    logger.info(f"Metrics report saved to {output_path}")
+def write_metrics_report(path: Path, report: dict[str, Any]) -> None:
+    """Write a report (metrics plus the metadata that explains them) as JSON."""
+    JSONExporter().export(report, path)
+    logger.info(f"Metrics report saved to {path}")
