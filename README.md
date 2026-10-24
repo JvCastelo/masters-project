@@ -6,14 +6,14 @@ A data pipeline that predicts ground solar radiation from **GOES-R** satellite i
 
 ```
 SONDA ZIPs ──► etl.sonda ──► data/raw/sonda/*.csv ─┐
-                                                    ├─► etl.build_dataset ──► data/processed/<station>/model_input_*.csv ──► ml.train / ml.tune ──► ml.predict
+                                                    ├─► etl.build_dataset ──► data/processed/<station>/model_input_*.csv ──► ml.train / ml.tune ──► ml.predict ──► ml.plots
 GOES S3 ─────► etl.goes ───► data/raw/goes/*.csv ──┘
 ```
 
 1. **SONDA ETL** (`etl.sonda`): downloads the SONDA ZIP archives (by year or year-month) of every configured station, extracts the `.dat` files and exports one CSV per station with the target (`glo_avg`, W/m²). Run it **first**: it reports periods SONDA does not publish, and the GOES step uses it to skip days with no target.
 2. **GOES ETL** (`etl.goes`): reads GOES-R ABI NetCDF files from NOAA's Open Data Registry with partial range requests, extracts the pixel window of **all configured stations and channels** in one pass, caches it per day, and exports one CSV per channel and station.
 3. **Build model input** (`etl.build_dataset`): stacks the GOES channels, filters the SONDA target (daytime and frozen-sensor filters), joins both on timestamp, drops missing values, validates the result with pandera and writes the table the ML stage reads.
-4. **Training, tuning and prediction** (`ml.train`, `ml.tune`, `ml.predict`): fit and evaluate the selected model on a training period for every station, search its hyperparameters, and evaluate the trained models (and ensembles of them) on another station or period.
+4. **Training, tuning, prediction and plots** (`ml.train`, `ml.tune`, `ml.predict`, `ml.plots`): fit and evaluate the selected model on a training period for every station, search its hyperparameters, evaluate the trained models (and ensembles of them) on another station or period, and draw the comparison.
 
 `etl/` and `ml/` never import each other. Their only contract is the `model_input_*.csv` file, whose structure `etl/schemas.py` checks before it is written.
 
@@ -28,8 +28,7 @@ GOES S3 ─────► etl.goes ───► data/raw/goes/*.csv ──┘
 git clone <repository-url>
 cd masters_project
 
-uv sync                      # runtime + dev tools (pytest, ruff, pytest-cov)
-uv sync --group notebooks    # also matplotlib and seaborn for the notebooks
+uv sync                      # runtime (including matplotlib) + dev tools (pytest, ruff, pytest-cov, ipykernel)
 ```
 
 ## Configuration
@@ -145,9 +144,18 @@ export MASTERS_PIPELINE_CONFIG=config/experiments/ourinhos-2023.json
 uv run python -m masters_project.etl.build_dataset
 uv run python -m masters_project.ml.train
 uv run python -m masters_project.ml.predict
+uv run python -m masters_project.ml.plots
 ```
 
-`notebooks/02_test_model.py` plots what `ml.predict` wrote (it computes nothing). Do not run the GOES ETL with this config: its period covers 2023 for all three stations.
+Do not run the GOES ETL with this config: its period covers 2023 for all three stations.
+
+**Plots.** `ml.plots` reads what `ml.predict` wrote for the experiment in `ml_config.predict` and saves three PNG files next to it, in the target station's results directory (nothing is recomputed; the numbers are the ones `ml.predict` reported):
+
+- `<model>_predict_<start>_<end>_timeseries.png`: observed against each model and ensemble, over the whole period (one panel each). A gap longer than 30 minutes, such as the night, is drawn as a break, not as a line across it.
+- `..._window.png`: all of them on one panel for one week, by default the week with the most data.
+- `..._metrics.png`: one bar chart per metric.
+
+The figures are built with matplotlib's object API (no `pyplot`, no display), so the same functions serve a notebook: `notebooks/02_test_model.py` calls `plots.timeseries_figure`, `plots.window_figure` and `plots.metrics_figure` and displays the result; pass your own window to `window_figure` to look at another season. Like `ml.predict`, a missing output or config is logged with the fix and exits with code 1.
 
 ### Recommended Execution Workflow
 
@@ -170,7 +178,7 @@ data/
 ├── processed/<station>/     model_input_st_<start>_et_<end>_<STATION>.csv
 ├── processed/<station>/     ... and its manifest, model_input_*.meta.json
 ├── models/<station>/        <model>_st_<train period>_<STATION>_v1.joblib and its card (.json)
-├── results/<station>/       ..._metrics.json, ..._tuning.json, <model>_predict_..._predictions.csv, ..._metrics.json
+├── results/<station>/       ..._metrics.json, ..._tuning.json, <model>_predict_..._predictions.csv, ..._metrics.json, ..._*.png
 ├── logs/<pipeline>/         <YYYY-MM-DD_HHMMSS>.log, latest.log
 └── samples/                 tests, samples and experiments, in the same tree (kept apart from the real runs;
                              models saved before the pipeline refactor are in an old format and cannot be loaded)
@@ -192,7 +200,7 @@ Levels: `INFO` marks the milestones of a stage; `DEBUG` is per-file detail and i
 masters_project/
 ├── config/pipeline.json        # development defaults
 ├── config/experiments/         # one file per experiment (period, training window, predict section)
-├── notebooks/                  # exploratory analysis (needs --group notebooks)
+├── notebooks/                  # 02_test_model.py: looks at a prediction run through ml.plots
 ├── src/masters_project/
 │   ├── settings.py             # pydantic config and project paths
 │   ├── logging_setup.py        # one log file per run, with header and footer
@@ -208,7 +216,7 @@ masters_project/
 │   │   ├── filters.py          # daytime and frozen-sensor filters
 │   │   ├── schemas.py          # pandera data contracts
 │   │   └── build_dataset.py
-│   └── ml/                     # models, artifacts (model cards), evaluate, data, ensemble, train, tune, predict
+│   └── ml/                     # models, artifacts (model cards), evaluate, data, ensemble, train, tune, predict, plots
 └── tests/                      # mirrors src/
 ```
 
