@@ -10,6 +10,7 @@ from masters_project.enums import GoesChannel
 from masters_project.file_paths import file_paths
 from masters_project.exporters import CSVExporter
 from masters_project.etl.merger import DatasetMerger
+from masters_project.etl.schemas import DataValidationError, validate_model_input
 from masters_project.etl.filters import drop_frozen, keep_daytime
 from masters_project.settings import settings
 
@@ -97,6 +98,14 @@ def build_station_input(station: str) -> bool:
         f"[{station}] Final dataset ready: {len(df_final)} rows "
         f"({initial_len - len(df_final)} dropped for NaNs)."
     )
+
+    try:
+        validate_model_input(
+            df_final, settings.etl.sonda.target_variable, label=f"[{station}]"
+        )
+    except DataValidationError:
+        logger.exception(f"[{station}] The model input is not valid; not written.")
+        return False
 
     CSVExporter().export(df_final, file_paths.model_input(station))
     return True

@@ -14,6 +14,7 @@ import pandas as pd
 from masters_project.etl.sonda.client import SondaClient
 from masters_project.file_paths import file_paths
 from masters_project.exporters import CSVExporter
+from masters_project.etl.schemas import validate_sonda
 from masters_project.etl.sonda.processor import SondaProcessor
 from masters_project.settings import settings
 from masters_project.etl.sonda.periods import format_period, get_target_periods
@@ -101,6 +102,8 @@ def process_station(station: str, granularity: str) -> StationResult:
     target = settings.etl.sonda.target_variable
     valid_days, total_days = SondaProcessor.coverage_days(df_sonda, target)
     logger.info(f"[{station}] Days with a valid '{target}': {valid_days}/{total_days}")
+
+    validate_sonda(df_sonda, target, label=f"[{station}]")
 
     CSVExporter().export(df_sonda, file_paths.raw_sonda(station))
     return result
