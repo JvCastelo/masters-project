@@ -14,7 +14,6 @@ from masters_project.etl.schemas import DataValidationError, validate_model_inpu
 from masters_project.etl.filters import drop_frozen, keep_daytime
 from masters_project.settings import settings
 
-settings.setup_logging("building_model_input")
 logger = logging.getLogger(__name__)
 
 
@@ -125,4 +124,5 @@ def build_model_input() -> int:
 
 
 if __name__ == "__main__":
+    settings.setup_logging("building_model_input")
     sys.exit(build_model_input())

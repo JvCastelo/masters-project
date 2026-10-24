@@ -39,7 +39,6 @@ from masters_project.etl.goes.worker import (
 )
 from masters_project.settings import settings
 
-settings.setup_logging("goes_etl")
 logger = logging.getLogger(__name__)
 
 # Listing days is network latency, not CPU, so it can use many more threads than cores.
@@ -276,6 +275,7 @@ def target_days() -> set[date] | None:
 
 def main() -> None:
     """Run the GOES ETL for every configured channel and export one CSV per channel and station."""
+    settings.setup_logging("goes_etl")
     goes = settings.etl.goes
     client = GoesS3Client(product_name=goes.product_name, bucket_name=goes.bucket_name)
 

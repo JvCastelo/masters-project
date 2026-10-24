@@ -79,6 +79,7 @@ def restore_root_logger():
     root.setLevel(level)
 
 
+@pytest.mark.real_logging
 def test_setup_logging_uses_rotating_file_handler_at_info(
     tmp_path, monkeypatch: pytest.MonkeyPatch, restore_root_logger
 ) -> None:
@@ -140,3 +141,30 @@ def test_filters_reject_out_of_range_values(field: str, value: float) -> None:
     """Failure mode: an impossible angle, or a run of 1 (every row), is rejected at load time."""
     with pytest.raises(ValidationError, match=field):
         FiltersConfig(**{field: value})
+
+
+@pytest.mark.parametrize(
+    ("content", "message"),
+    [
+        (None, "Config file not found"),
+        ("{not json", "CONFIGURATION ERROR"),
+        ('{"etl_config": {}}', "CONFIGURATION ERROR"),
+    ],
+    ids=["missing_file", "invalid_json", "invalid_schema"],
+)
+def test_unusable_config_file_exits_with_code_1(
+    tmp_path, monkeypatch: pytest.MonkeyPatch, capsys, content: str | None, message: str
+) -> None:
+    """Failure mode: a bad config stops the program before any long run starts."""
+    from masters_project.settings import Settings
+
+    path = tmp_path / "pipeline.json"
+    if content is not None:
+        path.write_text(content)
+    monkeypatch.setattr(Settings, "PIPELINE_CONFIG_FILE", path)
+
+    with pytest.raises(SystemExit) as exit_info:
+        Settings()
+
+    assert exit_info.value.code == 1
+    assert message in capsys.readouterr().out

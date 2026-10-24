@@ -39,3 +39,15 @@ notebooks = [
     "matplotlib>=3.11.2",
     "seaborn>=0.13.2",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["masters_project"]
+
+[tool.coverage.report]
+show_missing = true
+# Line coverage was 99% when this floor was set; the guard is there to catch a regression.
+fail_under = 90
+exclude_also = ['if __name__ == "__main__":']

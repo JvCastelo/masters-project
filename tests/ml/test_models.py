@@ -35,3 +35,11 @@ def test_model_save_creates_missing_directories_and_roundtrips(
     loaded = build_model(model_name, **hyperparameters)
     loaded.load(path)
     np.testing.assert_allclose(loaded.predict(X), model.predict(X))
+
+
+@pytest.mark.parametrize("model_name", list(settings.ml.models))
+def test_predict_before_training_raises(model_name: str) -> None:
+    """Failure mode: predicting with an unfitted scaler must fail loudly."""
+    model = build_model(model_name)
+    with pytest.raises(ValueError, match="must be trained or loaded"):
+        model.predict(np.zeros((2, 4)))

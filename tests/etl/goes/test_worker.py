@@ -41,3 +41,18 @@ def test_extract_file_collects_garbage_after_success() -> None:
     read.assert_called_once_with(file, "Rad", 1, {"A": (5, 5)})
     assert result.error is None and result.timestamp == "ts"
     collect.assert_called_once()
+
+
+def test_each_process_creates_its_s3_client_only_once() -> None:
+    worker._client = None
+    try:
+        with patch.object(worker, "GoesS3Client") as client_class:
+            first = worker._get_client(JOB)
+            second = worker._get_client(JOB)
+    finally:
+        worker._client = None
+
+    assert first is second
+    client_class.assert_called_once_with(
+        product_name="ABI-L1b-RadF", bucket_name="noaa-goes16"
+    )

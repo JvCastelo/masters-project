@@ -58,3 +58,26 @@ def test_goes_cache_day_is_independent_of_period_and_station() -> None:
         settings.CACHE_PATH / "goes" / "ABI-L1b-RadF" / "Rad_r1" / "C03"
     )
     assert path.name == "032.csv"
+
+
+def test_goes_listing_and_pixel_caches_live_under_cache_goes() -> None:
+    listing = file_paths.goes_listing_dir("noaa-goes16", "ABI-L1b-RadF")
+    pixels = file_paths.goes_pixels("noaa-goes16", "ABI-L1b-RadF", "C03")
+
+    assert (
+        listing
+        == settings.CACHE_PATH / "goes" / "listing" / "noaa-goes16" / "ABI-L1b-RadF"
+    )
+    assert pixels.name == "C03.json"
+    assert (
+        pixels.parent
+        == settings.CACHE_PATH / "goes" / "pixels" / "noaa-goes16" / "ABI-L1b-RadF"
+    )
+
+
+def test_model_tuning_path_has_the_tuning_suffix_under_results() -> None:
+    path = file_paths.model_tuning("OURINHOS", "KNN", "v2")
+
+    assert path.parent == settings.RESULTS_PATH
+    assert path.name.startswith("knn_st_")
+    assert path.name.endswith("_OURINHOS_v2_tuning.json")

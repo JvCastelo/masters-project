@@ -181,3 +181,17 @@ def test_load_pixels_moved_station_returns_none(tmp_path: Path) -> None:
     path = tmp_path / "C03.json"
     save_pixels(path, COORDS, PIXELS)
     assert load_pixels(path, {**COORDS, "A": (-23.1, -49.8)}) is None
+
+
+def test_load_day_with_a_different_schema_is_ignored_and_warned(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A cache written with another window radius must not be served as if it matched."""
+    path = tmp_path / "001.csv"
+    pd.DataFrame({"source_key": ["a"], "other": [1]}).to_csv(path, index=False)
+
+    df = load_day(path, WINDOW_COLS)
+
+    assert df.empty
+    assert list(df.columns) == KEY_COLUMNS + WINDOW_COLS
+    assert "Cache schema mismatch" in caplog.text

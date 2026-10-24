@@ -149,3 +149,11 @@ def test_validation_error_lists_the_failed_checks_with_examples() -> None:
     message = str(error.value)
     assert message.startswith("[OURINHOS] failed validation:")
     assert "radius=1_C13_33" in message and "1 failures" in message
+
+
+def test_validation_error_caps_how_many_failed_checks_it_lists() -> None:
+    df = _model_input()
+    df.loc[0, PIXELS[:8]] = np.nan  # eight columns fail not_nullable
+    with pytest.raises(DataValidationError) as error:
+        validate_model_input(df, TARGET)
+    assert "and 3 more failed checks" in str(error.value)

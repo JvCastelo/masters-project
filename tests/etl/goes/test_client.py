@@ -136,3 +136,16 @@ def test_list_files_by_channel_only_days_skips_other_days(
         "noaa-goes16/ABI-L1b-RadC/2019/002/*/*.nc",
         "noaa-goes16/ABI-L1b-RadC/2019/004/*/*.nc",
     ]
+
+
+def test_open_partial_uses_a_block_cache_so_only_needed_ranges_are_fetched(
+    mock_goes_s3_client: GoesS3Client,
+) -> None:
+    """Regression: the s3fs default read 402 MB of a 47 MB file; 512 KB blocks read ~10%."""
+    mock_goes_s3_client.open_partial("noaa-goes16/ABI-L1b-RadC/2019/001/12/file.nc")
+
+    mock_goes_s3_client.fs.open.assert_called_once_with(
+        "s3://noaa-goes16/ABI-L1b-RadC/2019/001/12/file.nc",
+        cache_type="blockcache",
+        block_size=512 * 1024,
+    )

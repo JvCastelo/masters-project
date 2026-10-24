@@ -169,3 +169,17 @@ def test_days_with_target_unions_valid_days_across_stations(tmp_path: Path) -> N
     days = SondaProcessor.days_with_target([a, b], "glo_avg")
 
     assert days == {date(2023, 1, 2), date(2023, 1, 3)}  # Jan 1 has no value anywhere
+
+
+def test_create_dataframe_unreadable_dat_is_logged_and_raised(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Failure mode: a .dat without the ``timestamp`` column cannot be parsed."""
+    directory = tmp_path / "extracted"
+    directory.mkdir()
+    (directory / "station.dat").write_text("metadata\nwrong,columns\n1,2\n")
+
+    with pytest.raises(ValueError):
+        SondaProcessor.create_dataframe(directory)
+
+    assert "Failed to read or delete station.dat" in caplog.text

@@ -104,3 +104,17 @@ def test_json_exporter_export_empty_dict_skips_without_error(
     dest = tmp_path / "empty.json"
     JSONExporter().export({}, dest)
     assert not dest.exists()
+
+
+def test_export_error_is_logged_and_reraised(
+    sample_dataframe: pd.DataFrame,
+    tmp_output_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Failure mode: a write error must reach the caller, not be swallowed."""
+    exporter = CSVExporter()
+    with patch.object(exporter, "_save_to_disk", side_effect=OSError("disk full")):
+        with pytest.raises(OSError, match="disk full"):
+            exporter.export(sample_dataframe, tmp_output_path / "x.csv")
+
+    assert "Error exporting to" in caplog.text

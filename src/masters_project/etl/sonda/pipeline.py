@@ -19,7 +19,6 @@ from masters_project.etl.sonda.processor import SondaProcessor
 from masters_project.settings import settings
 from masters_project.etl.sonda.periods import format_period, get_target_periods
 
-settings.setup_logging("sonda_etl")
 logger = logging.getLogger(__name__)
 
 
@@ -119,6 +118,7 @@ def main(granularity: str = "year") -> int:
         0 if every period of every station was obtained, 1 otherwise. A station that
         raises does not stop the others.
     """
+    settings.setup_logging("sonda_etl")
     results = []
     for station in settings.stations:
         try:

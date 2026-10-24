@@ -167,3 +167,20 @@ def test_parse_timestamp_accepts_bytes_and_rounds_to_ten_minutes() -> None:
     assert GoesProcessor.parse_timestamp(b"2022-02-01T00:09:51.4Z") == pd.Timestamp(
         "2022-02-01 00:10:00", tz="UTC"
     )
+
+
+def test_read_windows_returns_raw_values_when_the_file_is_not_packed(tmp_path) -> None:
+    """Without scale_factor/add_offset/_FillValue the stored values are returned untouched."""
+    import h5py
+
+    path = tmp_path / "plain.h5"
+    raw = np.arange(25, dtype=np.int16).reshape(5, 5)
+    with h5py.File(path, "w") as h5:
+        h5["Rad"] = raw
+        h5.attrs["time_coverage_start"] = "2022-02-01T00:04:27.6Z"
+
+    with open(path, "rb") as f:
+        _, windows = GoesProcessor.read_windows(f, "Rad", 1, {"A": (2, 2)})
+
+    np.testing.assert_array_equal(windows["A"], raw[1:4, 1:4].flatten())
+    assert windows["A"].dtype == np.int16

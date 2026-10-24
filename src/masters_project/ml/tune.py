@@ -14,7 +14,6 @@ from masters_project.ml.data import (
 )
 from masters_project.settings import settings
 
-settings.setup_logging("tuning_pipeline")
 logger = logging.getLogger(__name__)
 
 
@@ -76,6 +75,7 @@ def main() -> int:
     Returns:
         0 if every station was tuned, 1 otherwise.
     """
+    settings.setup_logging("tuning_pipeline")
     logger.info("--- Starting ML Tuning Pipeline ---")
 
     failed = []
