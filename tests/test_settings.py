@@ -162,3 +162,89 @@ def test_train_period_is_the_configured_one_or_else_the_etl_period(
     assert settings.train_period == PeriodConfig(
         start_date=settings.etl.start_date, end_date=settings.etl.end_date
     )
+
+
+# =============================================================================
+# ml_config.predict
+# =============================================================================
+
+
+def _predict(**overrides):
+    from masters_project.settings import PredictConfig
+
+    values = {
+        "target_station": "OURINHOS",
+        "start_date": "2023-01-01",
+        "end_date": "2023-12-31",
+        "models": ["CACHOEIRA_PAULISTA", "OURINHOS", "SAO_MARTINHO_DA_SERRA"],
+        "ensembles": {
+            "CPA_SMS_IDW": {
+                "members": ["CACHOEIRA_PAULISTA", "SAO_MARTINHO_DA_SERRA"],
+                "weights": "idw",
+            }
+        },
+    }
+    return PredictConfig(**{**values, **overrides})
+
+
+def test_predict_config_accepts_the_experiment_of_the_project() -> None:
+    config = _predict()
+    assert config.ensembles["CPA_SMS_IDW"].weights == "idw"
+    assert config.model_name is None
+
+
+def test_predict_config_weights_default_to_idw() -> None:
+    config = _predict(ensembles={"E": {"members": ["OURINHOS", "CACHOEIRA_PAULISTA"]}})
+    assert config.ensembles["E"].weights == "idw"
+
+
+def test_predict_config_inherits_the_period_check() -> None:
+    with pytest.raises(ValidationError, match="is after end_date"):
+        _predict(start_date="2024-01-01")
+
+
+def test_predict_config_rejects_an_ensemble_member_that_is_not_a_model() -> None:
+    with pytest.raises(
+        ValidationError, match=r"uses \['GHOST'\], which are not in predict.models"
+    ):
+        _predict(ensembles={"E": {"members": ["GHOST", "OURINHOS"]}})
+
+
+def test_predict_config_rejects_a_station_listed_twice() -> None:
+    with pytest.raises(ValidationError, match="lists a station twice"):
+        _predict(models=["OURINHOS", "OURINHOS"])
+
+
+def test_predict_config_rejects_an_ensemble_named_like_a_model() -> None:
+    with pytest.raises(ValidationError, match="has the name of a model"):
+        _predict(
+            ensembles={
+                "OURINHOS": {"members": ["CACHOEIRA_PAULISTA", "SAO_MARTINHO_DA_SERRA"]}
+            }
+        )
+
+
+def test_predict_config_rejects_unknown_weights_and_single_member_ensembles() -> None:
+    with pytest.raises(ValidationError):
+        _predict(
+            ensembles={
+                "E": {
+                    "members": ["OURINHOS", "CACHOEIRA_PAULISTA"],
+                    "weights": "median",
+                }
+            }
+        )
+    with pytest.raises(ValidationError):
+        _predict(ensembles={"E": {"members": ["OURINHOS"]}})
+
+
+def test_predict_config_is_optional_in_ml_config() -> None:
+    from masters_project.settings import MlConfig
+
+    config = MlConfig(
+        selected_model="KNN",
+        test_size=0.2,
+        evaluation_metrics=["rmse"],
+        models={"KNN": {}},
+    )
+    assert config.predict is None and config.train is None

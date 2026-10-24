@@ -129,3 +129,16 @@ def test_raw_goes_dir_can_be_overridden_with_another_directory_name() -> None:
 
 def test_raw_sonda_dir_is_the_station_directory_under_raw_sonda() -> None:
     assert file_paths.raw_sonda_dir(STATION) == settings.RAW_PATH / "sonda" / "ourinhos"
+
+
+def test_prediction_outputs_live_in_the_target_stations_results() -> None:
+    csv = file_paths.predictions(STATION, "KNN", "2023-01-01", "2023-12-31")
+    report = file_paths.predictions_report(STATION, "KNN", "2023-01-01", "2023-12-31")
+
+    assert csv.parent == report.parent == settings.RESULTS_PATH / "ourinhos"
+    assert (
+        csv.name == "knn_predict_st_2023-01-01_et_2023-12-31_OURINHOS_predictions.csv"
+    )
+    assert (
+        report.name == "knn_predict_st_2023-01-01_et_2023-12-31_OURINHOS_metrics.json"
+    )

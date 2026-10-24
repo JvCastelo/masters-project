@@ -245,5 +245,38 @@ class FilePathBuilder:
             / f"{stem}_tuning.json"
         )
 
+    @staticmethod
+    def _predict_stem(
+        target: str, model_name: str, start_date: str, end_date: str
+    ) -> str:
+        return f"{model_name.lower()}_predict_st_{start_date}_et_{end_date}_{target}"
+
+    @staticmethod
+    def predictions(
+        target: str, model_name: str, start_date: str, end_date: str
+    ) -> Path:
+        """CSV with the observed values and the predictions of every model and ensemble.
+
+        Lives in the **target** station's results directory; the period is the one evaluated.
+        """
+        stem = FilePathBuilder._predict_stem(target, model_name, start_date, end_date)
+        return (
+            settings.RESULTS_PATH
+            / FilePathBuilder.station_dir(target)
+            / f"{stem}_predictions.csv"
+        )
+
+    @staticmethod
+    def predictions_report(
+        target: str, model_name: str, start_date: str, end_date: str
+    ) -> Path:
+        """JSON with the metrics of every model and ensemble and what produced them."""
+        stem = FilePathBuilder._predict_stem(target, model_name, start_date, end_date)
+        return (
+            settings.RESULTS_PATH
+            / FilePathBuilder.station_dir(target)
+            / f"{stem}_metrics.json"
+        )
+
 
 file_paths = FilePathBuilder()

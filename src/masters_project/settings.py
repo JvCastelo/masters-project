@@ -5,7 +5,7 @@ import os
 import sys
 from datetime import date
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import (
     BaseModel,
@@ -98,6 +98,43 @@ class PeriodConfig(BaseModel):
         return self
 
 
+class EnsembleConfig(BaseModel):
+    """Several models whose predictions are combined into one."""
+
+    members: list[str] = Field(min_length=2)
+    #: ``idw``: inverse-distance weights from the target station; ``equal``: plain mean.
+    weights: Literal["idw", "equal"] = "idw"
+
+
+class PredictConfig(PeriodConfig):
+    """What ``python -m masters_project.ml.predict`` evaluates: models and ensembles on one station.
+
+    The period (inherited ``start_date``/``end_date``) is where the target station is evaluated.
+    """
+
+    target_station: str
+    #: Stations whose trained model is evaluated on the target station's data.
+    models: list[str] = Field(min_length=1)
+    #: Name -> ensemble of some of ``models``.
+    ensembles: dict[str, EnsembleConfig] = Field(default_factory=dict)
+    #: Model to use; defaults to ``ml_config.selected_model``.
+    model_name: str | None = None
+
+    @model_validator(mode="after")
+    def _models_and_ensembles_are_consistent(self) -> "PredictConfig":
+        if len(set(self.models)) != len(self.models):
+            raise ValueError("predict.models lists a station twice.")
+        for name, ensemble in self.ensembles.items():
+            outside = [m for m in ensemble.members if m not in self.models]
+            if outside:
+                raise ValueError(
+                    f"Ensemble '{name}' uses {outside}, which are not in predict.models."
+                )
+            if name in self.models:
+                raise ValueError(f"Ensemble '{name}' has the name of a model.")
+        return self
+
+
 class MlConfig(BaseModel):
     """Machine learning configuration, including which model the pipelines run."""
 
@@ -106,6 +143,8 @@ class MlConfig(BaseModel):
     test_size: float
     #: Period of the model input used to train and tune; ``None`` uses the whole dataset.
     train: PeriodConfig | None = None
+    #: Evaluation of trained models on another station/period; ``None`` if not used.
+    predict: PredictConfig | None = None
     evaluation_metrics: list[str]
     #: Model name -> constructor arguments of its estimator (see ``masters_project.ml.models``).
     models: dict[str, dict[str, Any]]
