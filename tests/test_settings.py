@@ -65,41 +65,6 @@ def test_goes_config_rejects_empty_or_unknown_channels(channels: list[str]) -> N
         _goes_config(channels)
 
 
-@pytest.fixture
-def restore_root_logger():
-    """setup_logging replaces the root logger's handlers: put the originals back."""
-    import logging
-
-    root = logging.getLogger()
-    handlers, level = list(root.handlers), root.level
-    yield
-    for handler in list(root.handlers):
-        handler.close()
-    root.handlers[:] = handlers
-    root.setLevel(level)
-
-
-@pytest.mark.real_logging
-def test_setup_logging_uses_rotating_file_handler_at_info(
-    tmp_path, monkeypatch: pytest.MonkeyPatch, restore_root_logger
-) -> None:
-    import logging
-    from logging.handlers import RotatingFileHandler
-
-    monkeypatch.setattr(settings, "LOG_PATH", tmp_path)
-    monkeypatch.setattr(settings.etl, "log_level", "INFO")
-
-    settings.setup_logging("rotation_test")
-
-    file_handlers = [
-        h for h in logging.getLogger().handlers if isinstance(h, RotatingFileHandler)
-    ]
-    assert len(file_handlers) == 1
-    assert file_handlers[0].maxBytes == 10 * 1024 * 1024
-    assert file_handlers[0].backupCount == 5
-    assert file_handlers[0].level == logging.INFO
-
-
 def test_pipeline_config_path_can_be_overridden_by_environment(tmp_path) -> None:
     """MASTERS_PIPELINE_CONFIG makes a fresh interpreter load another config file."""
     import json

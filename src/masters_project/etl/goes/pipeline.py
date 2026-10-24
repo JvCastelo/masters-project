@@ -37,6 +37,7 @@ from masters_project.etl.goes.worker import (
 from masters_project.etl.sonda.processor import SondaProcessor
 from masters_project.exporters import CSVExporter
 from masters_project.file_paths import file_paths
+from masters_project.logging_setup import run_logging
 from masters_project.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -273,9 +274,8 @@ def target_days() -> set[date] | None:
     )
 
 
-def main() -> None:
+def run() -> None:
     """Run the GOES ETL for every configured channel and export one CSV per channel and station."""
-    settings.setup_logging("goes_etl")
     goes = settings.etl.goes
     client = GoesS3Client(product_name=goes.product_name, bucket_name=goes.bucket_name)
 
@@ -310,3 +310,17 @@ def main() -> None:
 
     for plan in plans:
         export_channel(plan)
+
+
+def main() -> None:
+    """Run the GOES ETL inside its own run log (``data/logs/etl_goes/``)."""
+    goes = settings.etl.goes
+    with run_logging(
+        "etl_goes",
+        period=f"{settings.etl.start_date}..{settings.etl.end_date}",
+        stations=list(settings.stations),
+        channels=goes.channels,
+        workers=settings.etl.max_workers,
+        skip_days_without_target=goes.skip_days_without_target,
+    ):
+        run()

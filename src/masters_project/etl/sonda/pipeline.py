@@ -17,6 +17,7 @@ from masters_project.etl.sonda.periods import format_period, get_target_periods
 from masters_project.etl.sonda.processor import SondaProcessor
 from masters_project.exporters import CSVExporter
 from masters_project.file_paths import file_paths
+from masters_project.logging_setup import run_logging
 from masters_project.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -108,7 +109,7 @@ def process_station(station: str, granularity: str) -> StationResult:
     return result
 
 
-def main(granularity: str = "year") -> int:
+def run(granularity: str = "year") -> int:
     """Run the SONDA ETL for every station in ``etl_config.stations``.
 
     Args:
@@ -118,7 +119,6 @@ def main(granularity: str = "year") -> int:
         0 if every period of every station was obtained, 1 otherwise. A station that
         raises does not stop the others.
     """
-    settings.setup_logging("sonda_etl")
     results = []
     for station in settings.stations:
         try:
@@ -138,3 +138,23 @@ def main(granularity: str = "year") -> int:
             logger.error(f"[{r.station}] FAILED for: {r.failed}. Run again to retry.")
 
     return 1 if problems else 0
+
+
+def main(granularity: str = "year") -> int:
+    """Run the SONDA ETL inside its own run log (``data/logs/etl_sonda/``).
+
+    Args:
+        granularity: 'year' (one ZIP per year, fewer requests) or 'month'.
+
+    Returns:
+        The exit code of :func:`run`.
+    """
+    with run_logging(
+        "etl_sonda",
+        period=f"{settings.etl.start_date}..{settings.etl.end_date}",
+        stations=list(settings.stations),
+        granularity=granularity,
+        data_type=settings.etl.sonda.data_type,
+    ) as log:
+        log.exit_code = run(granularity)
+    return log.exit_code

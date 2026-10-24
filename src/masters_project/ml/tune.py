@@ -7,6 +7,7 @@ from sklearn.model_selection import RandomizedSearchCV
 
 from masters_project.exporters import JSONExporter
 from masters_project.file_paths import file_paths
+from masters_project.logging_setup import run_logging
 from masters_project.ml.data import (
     get_train_test_splits,
     load_model_input_data,
@@ -67,7 +68,7 @@ def tune_station(station: str) -> None:
     logger.info(f"[{station}] Tuning results permanently saved to {output_path}")
 
 
-def main() -> int:
+def run() -> int:
     """Tune the selected model for every station in ``etl_config.stations``.
 
     A failure in one station is logged and does not stop the others.
@@ -75,7 +76,6 @@ def main() -> int:
     Returns:
         0 if every station was tuned, 1 otherwise.
     """
-    settings.setup_logging("tuning_pipeline")
     logger.info("--- Starting ML Tuning Pipeline ---")
 
     failed = []
@@ -92,6 +92,25 @@ def main() -> int:
 
     logger.info("--- Tuning Complete! ---")
     return 0
+
+
+def main() -> int:
+    """Run tuning inside its own run log (``data/logs/ml_tune/``).
+
+    Returns:
+        The exit code of :func:`run`.
+    """
+    with run_logging(
+        "ml_tune",
+        model=settings.ml.selected_model,
+        period=f"{settings.etl.start_date}..{settings.etl.end_date}",
+        stations=list(settings.stations),
+        n_iter=settings.tuning.n_iter,
+        cv=settings.tuning.cv,
+        scoring=settings.tuning.scoring,
+    ) as log:
+        log.exit_code = run()
+    return log.exit_code
 
 
 if __name__ == "__main__":

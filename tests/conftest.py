@@ -14,19 +14,12 @@ LAT, LON = -23.0, -49.844
 DAY_START = "2022-06-21 15:00"
 
 
-def pytest_configure(config: pytest.Config) -> None:
-    config.addinivalue_line(
-        "markers", "real_logging: run the real Settings.setup_logging (no stub)"
-    )
-
-
 @pytest.fixture(autouse=True)
-def quiet_logging(
-    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """``setup_logging`` replaces the root handlers, which would break ``caplog``."""
-    if request.node.get_closest_marker("real_logging") is None:
-        monkeypatch.setattr(settings, "setup_logging", lambda log_name: None)
+def isolated_logs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Run logs go to the test's temporary directory, never to ``data/logs``."""
+    directory = tmp_path / "logs"
+    monkeypatch.setattr(settings, "LOG_PATH", directory)
+    return directory
 
 
 @pytest.fixture

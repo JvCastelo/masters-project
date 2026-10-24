@@ -1,10 +1,8 @@
-"""Pipeline configuration (``config/pipeline.json``) validated with pydantic, plus project paths and logging."""
+"""Pipeline configuration (``config/pipeline.json``) validated with pydantic, plus the project paths."""
 
 import json
-import logging
 import os
 import sys
-from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from pydantic import (
@@ -194,49 +192,6 @@ class Settings:
     def model(self) -> ModelSettings:
         """Hyperparameters for ``ml_config.selected_model`` from ``ml_config.models``."""
         return self.ml.models[self.ml.selected_model]
-
-    def setup_logging(self, log_name: str) -> None:
-        """Configure root logger with console and rotating file handlers.
-
-        The console shows ``etl_config.log_level``. The file keeps INFO and above (DEBUG
-        only if ``log_level`` is DEBUG) and rotates at 10 MB, keeping 5 backups, so a long
-        run cannot fill the disk.
-        """
-        self.LOG_PATH.mkdir(parents=True, exist_ok=True)
-
-        formatter = logging.Formatter(
-            "%(asctime)s :: %(levelname)-8s :: %(name)s :: %(message)s"
-        )
-
-        console_handler = logging.StreamHandler(sys.stdout)
-        console_handler.setLevel(self.etl.log_level)
-        console_handler.setFormatter(formatter)
-
-        file_path = self.LOG_PATH / f"{log_name}.log"
-        file_handler = RotatingFileHandler(
-            file_path, maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8"
-        )
-        file_handler.setLevel(
-            logging.DEBUG if self.etl.log_level.upper() == "DEBUG" else logging.INFO
-        )
-        file_handler.setFormatter(formatter)
-
-        root_logger = logging.getLogger()
-        root_logger.setLevel(logging.DEBUG)
-
-        if root_logger.hasHandlers():
-            root_logger.handlers.clear()
-
-        root_logger.addHandler(console_handler)
-        root_logger.addHandler(file_handler)
-
-        logging.getLogger("botocore").setLevel(logging.WARNING)
-        logging.getLogger("urllib3").setLevel(logging.WARNING)
-        logging.getLogger("s3fs").setLevel(logging.WARNING)
-        logging.getLogger("h5netcdf").setLevel(logging.WARNING)
-        logging.getLogger("fsspec").setLevel(logging.WARNING)
-        logging.getLogger("httpx").setLevel(logging.WARNING)
-        logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 
 settings = Settings()

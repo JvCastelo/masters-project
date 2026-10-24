@@ -12,6 +12,7 @@ from masters_project.etl.merger import DatasetMerger
 from masters_project.etl.schemas import DataValidationError, validate_model_input
 from masters_project.exporters import CSVExporter
 from masters_project.file_paths import file_paths
+from masters_project.logging_setup import run_logging
 from masters_project.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -129,6 +130,19 @@ def build_model_input() -> int:
     return 0
 
 
+def main() -> int:
+    """Build the model input inside its own run log (``data/logs/etl_build_dataset/``)."""
+    filters = settings.etl.filters
+    with run_logging(
+        "etl_build_dataset",
+        period=f"{settings.etl.start_date}..{settings.etl.end_date}",
+        stations=list(settings.stations),
+        min_solar_elevation=filters.min_solar_elevation,
+        frozen_min_run=filters.frozen_min_run,
+    ) as log:
+        log.exit_code = build_model_input()
+    return log.exit_code
+
+
 if __name__ == "__main__":
-    settings.setup_logging("building_model_input")
-    sys.exit(build_model_input())
+    sys.exit(main())

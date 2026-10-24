@@ -4,6 +4,7 @@ import logging
 import sys
 
 from masters_project.file_paths import file_paths
+from masters_project.logging_setup import run_logging
 from masters_project.ml.data import (
     get_train_test_splits,
     load_model_input_data,
@@ -47,7 +48,7 @@ def train_station(station: str) -> None:
     )
 
 
-def main() -> int:
+def run() -> int:
     """Train and evaluate the selected model for every station in ``etl_config.stations``.
 
     A failure in one station is logged and does not stop the others.
@@ -55,7 +56,6 @@ def main() -> int:
     Returns:
         0 if every station was trained, 1 otherwise.
     """
-    settings.setup_logging("training_pipeline")
     logger.info("--- Starting ML Training Pipeline ---")
 
     failed = []
@@ -72,6 +72,22 @@ def main() -> int:
 
     logger.info("--- ML Training Pipeline Complete! ---")
     return 0
+
+
+def main() -> int:
+    """Run training inside its own run log (``data/logs/ml_train/``).
+
+    Returns:
+        The exit code of :func:`run`.
+    """
+    with run_logging(
+        "ml_train",
+        model=settings.ml.selected_model,
+        period=f"{settings.etl.start_date}..{settings.etl.end_date}",
+        stations=list(settings.stations),
+    ) as log:
+        log.exit_code = run()
+    return log.exit_code
 
 
 if __name__ == "__main__":
