@@ -1,5 +1,7 @@
 """Tests for masters_project.etl.build_dataset: stack channels, filter, join SONDA, validate, write."""
 
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -319,3 +321,62 @@ def test_main_reads_the_goes_dir_given_on_the_command_line(
 
 def test_main_exit_code_is_one_when_a_station_cannot_be_built(two_stations) -> None:
     assert build_dataset.main([]) == 1
+
+
+# =============================================================================
+# determinism: the result must not depend on the file system's listing order
+# =============================================================================
+
+
+@pytest.fixture
+def adversarial_glob_order(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make ``Path.glob`` return files in reverse name order, as an unlucky file system might."""
+    real_glob = Path.glob
+    monkeypatch.setattr(
+        Path,
+        "glob",
+        lambda self, pattern: iter(sorted(real_glob(self, pattern), reverse=True)),
+    )
+
+
+def _channel_blocks(columns: list[str]) -> list[str]:
+    seen: list[str] = []
+    for column in columns:
+        if column.startswith("radius=") and column.split("_")[1] not in seen:
+            seen.append(column.split("_")[1])
+    return seen
+
+
+def test_feature_columns_follow_channel_order_whatever_the_listing_order(
+    raw_inputs, adversarial_glob_order, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _filters(monkeypatch)
+    for channel in ("C13", "C01"):
+        _goes(channel, NIGHT + DAY).to_csv(
+            file_paths.raw_goes(channel, STATION), index=False
+        )
+
+    build_dataset.build_station_input(STATION)
+
+    assert _channel_blocks(list(_output().columns)) == ["C01", "C03", "C13"]
+
+
+def test_the_later_period_wins_a_timestamp_present_in_two_files(
+    raw_inputs, adversarial_glob_order, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two scans can round to the same timestamp; which one is kept must not be luck."""
+    _filters(monkeypatch)
+    later = _goes("C03", DAY[:1])
+    later[GoesProcessor.window_columns(1, "C03")] = (
+        999.0  # same timestamp, other values
+    )
+    later.to_csv(
+        file_paths.raw_goes_dir(STATION)
+        / "goes_C03_st_2022-06-21_et_2022-06-22_OURINHOS.csv",
+        index=False,
+    )
+
+    build_dataset.build_station_input(STATION)
+
+    row = _output().loc[lambda df: df["timestamp"] == pd.Timestamp(DAY[0], tz="UTC")]
+    assert (row["radius=1_C03_11"] == 999.0).all()

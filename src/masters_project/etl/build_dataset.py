@@ -50,7 +50,10 @@ def build_station_input(station: str, goes_dir: str | None = None) -> bool:
 
     logger.info(f"[{station}] Scanning directory: {goes_path}")
 
-    for file_path in goes_path.glob(f"goes_*_{station}.csv"):
+    # sorted(): glob returns the file system's order, which would decide the order of the feature
+    # columns and which of two scans rounded to the same timestamp is kept. Sorted names give
+    # C01..C16 and the periods of one channel in chronological order.
+    for file_path in sorted(goes_path.glob(f"goes_*_{station}.csv")):
         for channel in GoesChannel:
             if f"goes_{channel.value}_" in file_path.name:
                 logger.debug(f"Found file for {channel.value}: {file_path.name}")
