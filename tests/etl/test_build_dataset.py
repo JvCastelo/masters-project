@@ -156,3 +156,67 @@ def test_build_model_input_exit_code_reflects_every_station(
 
     file_paths.raw_sonda(STATION).unlink()
     assert build_dataset.build_model_input() == 1
+
+
+def test_only_the_stations_own_directory_is_read(
+    raw_inputs, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A CSV of the same station left in another directory must not leak into the dataset."""
+    _filters(monkeypatch)
+    stray = (
+        file_paths.raw_goes_dir(STATION, "other") / "goes_C03_st_x_et_y_OURINHOS.csv"
+    )
+    stray.parent.mkdir(parents=True)
+    _goes("C03", ["2022-06-21 16:00"]).to_csv(stray, index=False)
+
+    build_dataset.build_station_input(STATION)
+
+    assert len(_output()) == 8  # the stray 16:00 scan is not there
+
+
+def test_files_of_another_station_in_the_directory_are_ignored(
+    raw_inputs, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _filters(monkeypatch)
+    other = (
+        file_paths.raw_goes_dir(STATION) / "goes_C03_st_x_et_y_CACHOEIRA_PAULISTA.csv"
+    )
+    _goes("C03", ["2022-06-21 16:00"]).to_csv(other, index=False)
+
+    build_dataset.build_station_input(STATION)
+
+    assert len(_output()) == 8
+
+
+def test_goes_dir_reads_another_directory_inside_raw_goes(
+    raw_inputs, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``goes_dir`` points the build at a different set of CSVs without moving any file."""
+    _filters(monkeypatch)
+    experiment = file_paths.raw_goes_dir(STATION, "ourinhos_experiment")
+    experiment.mkdir(parents=True)
+    _goes("C03", DAY[:3]).to_csv(
+        experiment / file_paths.raw_goes("C03", STATION).name, index=False
+    )
+
+    assert build_dataset.build_station_input(STATION, goes_dir="ourinhos_experiment")
+
+    assert len(_output()) == 3
+
+
+def test_missing_goes_directory_names_the_expected_path(
+    data_tree, one_station, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Failure mode: the layout moved and the build used to find nothing without saying where."""
+    assert build_dataset.build_station_input(STATION) is False
+    assert "GOES directory not found" in caplog.text
+    assert str(file_paths.raw_goes_dir(STATION)) in caplog.text
+
+
+def test_empty_goes_directory_is_reported_as_no_files(
+    data_tree, one_station, caplog: pytest.LogCaptureFixture
+) -> None:
+    file_paths.raw_goes_dir(STATION).mkdir(parents=True)
+
+    assert build_dataset.build_station_input(STATION) is False
+    assert "No GOES files found" in caplog.text

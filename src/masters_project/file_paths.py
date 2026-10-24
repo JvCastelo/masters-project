@@ -1,4 +1,10 @@
-"""Canonical paths of every file the pipeline reads or writes: raw, cache, processed, models, results."""
+"""Canonical paths of every file the pipeline reads or writes: raw, cache, processed, models, results.
+
+Everything that belongs to one station lives in a directory named after it, below the stage
+directory: ``data/raw/goes/ourinhos/``, ``data/processed/ourinhos/``, ``data/models/ourinhos/``...
+File names keep the station and the period, so a copied file still says what it is. The GOES
+caches are per channel and day, not per station, and have their own tree under ``data/cache``.
+"""
 
 from pathlib import Path
 
@@ -13,15 +19,36 @@ class FilePathBuilder:
     """
 
     @staticmethod
+    def station_dir(station: str) -> str:
+        """Directory name of a station: its key in lower case (``OURINHOS`` -> ``ourinhos``)."""
+        return station.lower()
+
+    @staticmethod
+    def raw_goes_dir(station: str, name: str | None = None) -> Path:
+        """Directory under ``data/raw/goes`` that holds a station's GOES CSVs.
+
+        Args:
+            station: Station key (a key of ``etl_config.stations``).
+            name: Directory name to use instead of the station's own, relative to
+                ``data/raw/goes`` (for example a directory with another set of CSVs).
+
+        Returns:
+            ``data/raw/goes/<station>`` (or ``data/raw/goes/<name>``).
+        """
+        return (
+            settings.RAW_PATH / "goes" / (name or FilePathBuilder.station_dir(station))
+        )
+
+    @staticmethod
     def raw_goes(channel: str, station: str) -> Path:
-        """Path to the GOES CSV for ``channel`` under ``data/raw/goes``.
+        """Path to the GOES CSV for ``channel`` under the station's ``data/raw/goes`` directory.
 
         Args:
             channel: ABI channel id (e.g. ``\"C01\"``).
             station: Station key (a key of ``etl_config.stations``).
 
         Returns:
-            Full path: ``goes_{channel}_st_{start}_et_{end}_{station}.csv``.
+            Full path: ``raw/goes/<station>/goes_{channel}_st_{start}_et_{end}_{station}.csv``.
         """
         filename = (
             f"goes_{channel}_"
@@ -29,7 +56,7 @@ class FilePathBuilder:
             f"et_{settings.etl.end_date}_"
             f"{station}.csv"
         )
-        return settings.RAW_PATH / "goes" / filename
+        return FilePathBuilder.raw_goes_dir(station) / filename
 
     @staticmethod
     def goes_cache_day(
@@ -77,14 +104,19 @@ class FilePathBuilder:
         )
 
     @staticmethod
+    def raw_sonda_dir(station: str) -> Path:
+        """Directory under ``data/raw/sonda`` that holds a station's SONDA files."""
+        return settings.RAW_PATH / "sonda" / FilePathBuilder.station_dir(station)
+
+    @staticmethod
     def raw_sonda(station: str) -> Path:
-        """Path to the SONDA CSV under ``data/raw/sonda``.
+        """Path to the SONDA CSV under the station's ``data/raw/sonda`` directory.
 
         Args:
             station: Station key (a key of ``etl_config.stations``).
 
         Returns:
-            Full path: ``sonda_{data_type}_st_{start}_et_{end}_{station}.csv``.
+            Full path: ``raw/sonda/<station>/sonda_{data_type}_st_{start}_et_{end}_{station}.csv``.
         """
         filename = (
             f"sonda_{settings.etl.sonda.data_type}_"
@@ -92,17 +124,17 @@ class FilePathBuilder:
             f"et_{settings.etl.end_date}_"
             f"{station}.csv"
         )
-        return settings.RAW_PATH / "sonda" / filename
+        return FilePathBuilder.raw_sonda_dir(station) / filename
 
     @staticmethod
     def model_input(station: str) -> Path:
-        """Path to the merged feature table used as ML input under ``data/processed``.
+        """Path to the merged feature table used as ML input, in the station's processed directory.
 
         Args:
             station: Station key (a key of ``etl_config.stations``).
 
         Returns:
-            Full path: ``model_input_st_{start}_et_{end}_{station}.csv``.
+            Full path: ``processed/<station>/model_input_st_{start}_et_{end}_{station}.csv``.
         """
         filename = (
             f"model_input_"
@@ -110,11 +142,11 @@ class FilePathBuilder:
             f"et_{settings.etl.end_date}_"
             f"{station}.csv"
         )
-        return settings.PROCESSED_PATH / filename
+        return settings.PROCESSED_PATH / FilePathBuilder.station_dir(station) / filename
 
     @staticmethod
     def model_save(station: str, model_name: str, version: str = "v1") -> Path:
-        """Path for a trained model bundle (joblib) under ``data/models``.
+        """Path for a trained model bundle (joblib), in the station's models directory.
 
         Args:
             station: Station key (a key of ``etl_config.stations``).
@@ -122,7 +154,7 @@ class FilePathBuilder:
             version: Version tag suffix (default ``\"v1\"``).
 
         Returns:
-            Path ending in ``.joblib``.
+            Path ``models/<station>/{model}_st_..._{station}_{version}.joblib``.
         """
         filename = (
             f"{model_name.lower()}_"
@@ -131,11 +163,11 @@ class FilePathBuilder:
             f"{station}_{version}.joblib"
         )
 
-        return settings.MODELS_PATH / filename
+        return settings.MODELS_PATH / FilePathBuilder.station_dir(station) / filename
 
     @staticmethod
     def model_metrics(station: str, model_name: str, version: str = "v1") -> Path:
-        """Path for evaluation metrics JSON under ``data/results``.
+        """Path for evaluation metrics JSON, in the station's results directory.
 
         Args:
             station: Station key (a key of ``etl_config.stations``).
@@ -143,7 +175,7 @@ class FilePathBuilder:
             version: Version tag suffix (default ``\"v1\"``).
 
         Returns:
-            Path ending in ``_metrics.json``.
+            Path ``results/<station>/..._metrics.json``.
         """
         filename = (
             f"{model_name.lower()}_"
@@ -152,11 +184,11 @@ class FilePathBuilder:
             f"{station}_{version}_metrics.json"
         )
 
-        return settings.RESULTS_PATH / filename
+        return settings.RESULTS_PATH / FilePathBuilder.station_dir(station) / filename
 
     @staticmethod
     def model_tuning(station: str, model_name: str, version: str = "v1") -> Path:
-        """Path for hyperparameter tuning results JSON under ``data/results``.
+        """Path for hyperparameter tuning results JSON, in the station's results directory.
 
         Args:
             station: Station key (a key of ``etl_config.stations``).
@@ -164,7 +196,7 @@ class FilePathBuilder:
             version: Version tag suffix (default ``\"v1\"``).
 
         Returns:
-            Path ending in ``_tuning.json``.
+            Path ``results/<station>/..._tuning.json``.
         """
         filename = (
             f"{model_name.lower()}_"
@@ -173,7 +205,7 @@ class FilePathBuilder:
             f"{station}_{version}_tuning.json"
         )
 
-        return settings.RESULTS_PATH / filename
+        return settings.RESULTS_PATH / FilePathBuilder.station_dir(station) / filename
 
 
 file_paths = FilePathBuilder()

@@ -62,12 +62,15 @@ def _csv() -> pd.DataFrame:
     return pd.read_csv(file_paths.raw_sonda(STATION), parse_dates=["timestamp"])
 
 
-def test_download_period_picks_the_yearly_or_monthly_endpoint(tmp_path: Path) -> None:
-    client = MagicMock()
+def test_download_period_picks_the_yearly_or_monthly_endpoint(data_tree) -> None:
+    client = MagicMock(station_name=STATION)
+    destination = file_paths.raw_sonda_dir(STATION)
+
     pipeline.download_period(client, (2022, None))
     pipeline.download_period(client, (2022, 6))
-    assert client.download_file_by_year.call_args.args[0] == 2022
-    assert client.download_file_by_year_month.call_args.args[:2] == (2022, 6)
+
+    client.download_file_by_year.assert_called_once_with(2022, destination)
+    client.download_file_by_year_month.assert_called_once_with(2022, 6, destination)
 
 
 def test_station_result_is_ok_only_without_missing_or_failed_periods() -> None:

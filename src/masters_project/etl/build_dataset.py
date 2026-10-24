@@ -18,7 +18,7 @@ from masters_project.settings import settings
 logger = logging.getLogger(__name__)
 
 
-def build_station_input(station: str) -> bool:
+def build_station_input(station: str, goes_dir: str | None = None) -> bool:
     """Build and write the model input of one station.
 
     Steps: stack the station's GOES CSVs of each channel (overlapping periods are merged,
@@ -26,23 +26,29 @@ def build_station_input(station: str) -> bool:
     (daytime and frozen-sensor filters from ``etl_config.filters``), inner-join it with the
     GOES features, drop rows with missing values, validate the result and write it.
 
-    Only GOES files in ``data/raw/goes`` whose name ends with ``_{station}.csv`` are used.
-    The output goes to :func:`~masters_project.file_paths.FilePathBuilder.model_input`.
+    The GOES CSVs are read from the station's own directory, ``data/raw/goes/<station>/``,
+    and only files named ``goes_<channel>_..._<STATION>.csv`` are used. The output goes to
+    :func:`~masters_project.file_paths.FilePathBuilder.model_input`.
 
     Args:
         station: Station key (a key of ``etl_config.stations``).
+        goes_dir: Name of another directory inside ``data/raw/goes`` to read instead of the
+            station's own (for example a set of CSVs kept apart for an experiment).
 
     Returns:
-        True if the model input was written; False if the GOES or SONDA input is missing,
-        or the result fails validation (nothing is written then).
+        True if the model input was written; False if the GOES directory or the SONDA
+        input is missing, or the result fails validation (nothing is written then).
     """
-    goes_dir = settings.RAW_PATH / "goes"
+    goes_path = file_paths.raw_goes_dir(station, goes_dir)
+    if not goes_path.is_dir():
+        logger.error(f"[{station}] GOES directory not found: {goes_path}")
+        return False
 
     channel_groups = defaultdict(list)
 
-    logger.info(f"[{station}] Scanning directory: {goes_dir}")
+    logger.info(f"[{station}] Scanning directory: {goes_path}")
 
-    for file_path in goes_dir.glob(f"goes_*_{station}.csv"):
+    for file_path in goes_path.glob(f"goes_*_{station}.csv"):
         for channel in GoesChannel:
             if f"goes_{channel.value}_" in file_path.name:
                 logger.debug(f"Found file for {channel.value}: {file_path.name}")

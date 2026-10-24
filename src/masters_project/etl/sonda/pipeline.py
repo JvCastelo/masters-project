@@ -42,9 +42,9 @@ class StationResult:
 
 
 def download_period(client: SondaClient, period: tuple[int, int | None]) -> Path:
-    """Download the ZIP of one period (a year, or a year and month) into ``data/raw/sonda``."""
+    """Download the ZIP of one period (a year, or a year and month) into the station's SONDA directory."""
     year, month = period
-    destination = settings.RAW_PATH / "sonda"
+    destination = file_paths.raw_sonda_dir(client.station_name)
     if month is None:
         return client.download_file_by_year(year, destination)
     return client.download_file_by_year_month(year, month, destination)
