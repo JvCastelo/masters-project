@@ -174,7 +174,7 @@ masters_project/
 │   │   ├── filters.py          # daytime and frozen-sensor filters
 │   │   ├── schemas.py          # pandera data contracts
 │   │   └── build_dataset.py
-│   └── ml/                     # models, factory, tuning, evaluate, data, train, tune
+│   └── ml/                     # models (scaler + estimator pipelines), evaluate, data, train, tune
 └── tests/                      # mirrors src/
 ```
 

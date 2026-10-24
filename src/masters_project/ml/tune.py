@@ -12,7 +12,7 @@ from masters_project.ml.data import (
     get_train_test_splits,
     load_model_input_data,
 )
-from masters_project.ml.tuning import get_tuning_config
+from masters_project.ml.models import build_model, search_space
 from masters_project.settings import settings
 
 # Run with ``python -m``, ``__name__`` is "__main__"; ``__spec__.name`` is the real module name.
@@ -27,12 +27,13 @@ def tune_station(station: str) -> None:
         get_train_test_splits
     )
 
-    base_estimator, param_grid = get_tuning_config(model_name)
+    pipeline = build_model(model_name, n_jobs=-1)
+    param_grid = search_space(model_name)
 
     logger.info(f"[{station}] Initializing Search with grid: {list(param_grid.keys())}")
 
     tuner = RandomizedSearchCV(
-        estimator=base_estimator,
+        estimator=pipeline,
         param_distributions=param_grid,
         n_iter=settings.tuning.n_iter,
         scoring=settings.tuning.scoring,

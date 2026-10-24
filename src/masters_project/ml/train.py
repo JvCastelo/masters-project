@@ -3,6 +3,8 @@
 import logging
 import sys
 
+import joblib
+
 from masters_project.file_paths import file_paths
 from masters_project.logging_setup import run_logging
 from masters_project.ml.data import (
@@ -10,7 +12,7 @@ from masters_project.ml.data import (
     load_model_input_data,
 )
 from masters_project.ml.evaluate import evaluate_performance
-from masters_project.ml.factory import build_model
+from masters_project.ml.models import build_model
 from masters_project.settings import settings
 
 # Run with ``python -m``, ``__name__`` is "__main__"; ``__spec__.name`` is the real module name.
@@ -28,13 +30,13 @@ def train_station(station: str) -> None:
 
     logger.info(f"[{station}] Initializing the Machine Learning algorithm...")
 
-    hyperparameters = settings.model.model_dump(exclude_none=True)
-    model = build_model(model_name=model_name, **hyperparameters)
-
-    model.train(X_train, y_train)
+    model = build_model(model_name, **settings.model)
+    model.fit(X_train, y_train)
 
     model_path = file_paths.model_save(station, model_name, "v1")
-    model.save(model_path)
+    model_path.parent.mkdir(parents=True, exist_ok=True)
+    joblib.dump(model, model_path)
+    logger.info(f"[{station}] Model saved to {model_path}")
 
     logger.info(f"[{station}] Generating predictions on unseen test data...")
     predictions = model.predict(X_test)

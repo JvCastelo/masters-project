@@ -4,6 +4,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 from pydantic import (
     BaseModel,
@@ -77,22 +78,14 @@ class EtlConfig(BaseModel):
     sonda: SondaConfig
 
 
-class ModelSettings(BaseModel):
-    """Configuration for a specific Machine Learning model."""
-
-    n_neighbors: int | None = None
-    n_jobs: int | None = None
-    n_estimators: int | None = None
-    learning_rate: float | None = None
-
-
 class MlConfig(BaseModel):
     """Machine learning configuration, including which model the pipelines run."""
 
     selected_model: str
     test_size: float
     evaluation_metrics: list[str]
-    models: dict[str, ModelSettings]
+    #: Model name -> constructor arguments of its estimator (see ``masters_project.ml.models``).
+    models: dict[str, dict[str, Any]]
 
     @model_validator(mode="after")
     def _selected_model_is_configured(self) -> "MlConfig":
@@ -189,7 +182,7 @@ class Settings:
         return self.etl.stations
 
     @property
-    def model(self) -> ModelSettings:
+    def model(self) -> dict[str, Any]:
         """Hyperparameters for ``ml_config.selected_model`` from ``ml_config.models``."""
         return self.ml.models[self.ml.selected_model]
 
