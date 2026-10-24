@@ -5,7 +5,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
-import xarray as xr
 
 from masters_project.loaders.goes_cache import (
     KEY_COLUMNS,
@@ -46,21 +45,11 @@ def _frame(
 
 
 def test_window_columns_radius_1_matches_legacy_naming() -> None:
-    """Names follow radius={r}_{channel}_{row}{col}, row-major, same as extract_window_to_df."""
+    """Names follow radius={r}_{channel}_{row}{col}, row-major."""
     assert WINDOW_COLS[0] == "radius=1_C03_11"
     assert WINDOW_COLS[4] == "radius=1_C03_22"
     assert WINDOW_COLS[-1] == "radius=1_C03_33"
     assert len(WINDOW_COLS) == 9
-
-
-def test_extract_windows_multiple_stations_matches_single_station_extraction() -> None:
-    """Each station's window equals what the single-station extractor returns."""
-    data = np.arange(100, dtype=float).reshape(10, 10)
-    ds = xr.Dataset({"Rad": (["y", "x"], data)})
-    windows = GoesProcessor.extract_windows(ds, "Rad", 1, {"A": (2, 3), "B": (7, 5)})
-
-    np.testing.assert_array_equal(windows["A"], data[1:4, 2:5].flatten())
-    np.testing.assert_array_equal(windows["B"], data[6:9, 4:7].flatten())
 
 
 # =============================================================================

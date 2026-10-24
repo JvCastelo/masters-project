@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 class GoesProcessor:
-    """Process GOES NetCDF: open as xarray, add channel/timestamp metadata, project lat/lon to indices, extract pixel windows."""
+    """Read GOES ABI files: project lat/lon to grid indices and read pixel windows straight from HDF5."""
 
     @staticmethod
     def open_as_dataset(file_obj: BinaryIO) -> xr.Dataset:
@@ -24,34 +24,6 @@ class GoesProcessor:
         """
         logger.debug("Opening file-like object as NetCDF dataset.")
         return xr.open_dataset(file_obj, engine="h5netcdf", cache=False)
-
-    @staticmethod
-    def add_metadata(ds: xr.Dataset) -> xr.Dataset:
-        """Parse channel and time from dataset attributes and attach to ds.attrs.
-
-        Args:
-            ds: GOES xarray Dataset with dataset_name and time_coverage_start.
-
-        Returns:
-            The same Dataset with attrs['channel'] and attrs['timestamp'] set.
-        """
-        logger.debug("Extracting metadata from dataset attributes.")
-        file_name = ds.attrs.get("dataset_name", "")
-
-        try:
-            channel = file_name.split("_")[1].split("-")[-1][-3:]
-            logger.debug(f"Detected channel: {channel}")
-        except Exception:
-            channel = "UNK"
-            logger.exception(f"Error catching channel name. Defaulting to {channel}")
-
-        timestamp = GoesProcessor.parse_timestamp(ds.attrs.get("time_coverage_start"))
-        logger.debug(f"Computed timestamp: {timestamp}")
-
-        ds.attrs["channel"] = channel
-        ds.attrs["timestamp"] = timestamp
-
-        return ds
 
     @staticmethod
     def get_target_indices(ds: xr.Dataset, lat: float, lon: float) -> tuple[int, int]:
@@ -105,58 +77,6 @@ class GoesProcessor:
         return int(i), int(j)
 
     @staticmethod
-    def extract_window_to_df(
-        ds: xr.Dataset, variable: str, radius: int
-    ) -> pd.DataFrame:
-        """Extract a (2*radius+1)^2 window around the target pixel and flatten to a one-row DataFrame.
-
-        Expects ds.attrs to contain target_pixel_i, target_pixel_j, and channel.
-
-        Args:
-            ds: GOES Dataset with the variable and target indices in attrs.
-            variable: Name of the data variable to extract (e.g. 'Rad').
-            radius: Half-width of the square window in pixels (window size = 2*radius+1).
-
-        Returns:
-            DataFrame with one row: flattened window columns (radius={r}_{channel}_{row}{col}) and timestamp.
-
-        Raises:
-            ValueError: If target_pixel_i or target_pixel_j are missing from ds.attrs.
-        """
-        logger.debug(f"Extracting {variable} window with radius {radius}.")
-
-        i_center = ds.attrs.get("target_pixel_i")
-        j_center = ds.attrs.get("target_pixel_j")
-        channel = ds.attrs.get("channel")
-
-        if i_center is None or j_center is None:
-            logger.error(
-                "Target indices missing from dataset attributes. Extraction failed."
-            )
-            raise ValueError(
-                "target_pixel_i and target_pixel_j must be defined in ds.attrs"
-            )
-        i_slice = slice(max(i_center - radius, 0), i_center + radius + 1)
-        j_slice = slice(max(j_center - radius, 0), j_center + radius + 1)
-
-        window_data = ds[variable].isel(y=i_slice, x=j_slice).values
-
-        window_flat = window_data.flatten()
-
-        # Generate column names (radius={radius}_{channel}_{row}{col})
-        matrix_dim = 2 * radius + 1
-        cols = []
-        for idx in range(len(window_flat)):
-            row, col = (idx // matrix_dim) + 1, (idx % matrix_dim) + 1
-            cols.append(f"radius={radius}_{channel}_{row}{col}")
-
-        df = pd.DataFrame([window_flat], columns=cols)
-        df["timestamp"] = ds.attrs.get("timestamp")
-
-        logger.debug(f"Successfully created DataFrame with {len(cols)} window columns.")
-        return df
-
-    @staticmethod
     def window_columns(radius: int, channel: str) -> list[str]:
         """Column names of a flattened (2*radius+1)^2 window: ``radius={r}_{channel}_{row}{col}``.
 
@@ -172,34 +92,6 @@ class GoesProcessor:
             f"radius={radius}_{channel}_{idx // dim + 1}{idx % dim + 1}"
             for idx in range(dim * dim)
         ]
-
-    @staticmethod
-    def extract_windows(
-        ds: xr.Dataset,
-        variable: str,
-        radius: int,
-        pixels: dict[str, tuple[int, int]],
-    ) -> dict[str, np.ndarray]:
-        """Extract the flattened pixel window of ``variable`` for several stations at once.
-
-        Reads each station's window from the same open dataset, so the cost of opening
-        the file (the expensive part over S3) is paid once for all stations.
-
-        Args:
-            ds: GOES Dataset containing ``variable`` with y/x dimensions.
-            variable: Name of the data variable to extract (e.g. 'Rad').
-            radius: Half-width of the square window in pixels.
-            pixels: Mapping station name -> (i, j) target pixel indices.
-
-        Returns:
-            Mapping station name -> 1-D array with (2*radius+1)^2 values.
-        """
-        windows = {}
-        for station, (i_center, j_center) in pixels.items():
-            i_slice = slice(max(i_center - radius, 0), i_center + radius + 1)
-            j_slice = slice(max(j_center - radius, 0), j_center + radius + 1)
-            windows[station] = ds[variable].isel(y=i_slice, x=j_slice).values.flatten()
-        return windows
 
     @staticmethod
     def parse_timestamp(time_str: str | bytes) -> pd.Timestamp:

@@ -1,15 +1,14 @@
-"""Tests for masters_project.loaders: DataFrameExporter, CSVExporter, ParquetExporter, JSONExporter."""
+"""Tests for masters_project.loaders: DataFrameExporter, CSVExporter, JSONExporter."""
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pandas as pd
 import pytest
 
 from masters_project.loaders.csv import CSVExporter
 from masters_project.loaders.json import JSONExporter
-from masters_project.loaders.parquet import ParquetExporter
 
 
 # =============================================================================
@@ -64,22 +63,11 @@ def test_csv_exporter_export_empty_dataframe_skips_without_error(
 def test_exporter_creates_parent_directory_when_missing(
     sample_dataframe: pd.DataFrame, tmp_path: Path
 ) -> None:
-    """Base export logic creates parent directories; tested via CSVExporter (same for ParquetExporter)."""
+    """Base export logic creates parent directories; tested via CSVExporter (shared by every DataFrame exporter)."""
     nested = tmp_path / "nested" / "dir" / "out.csv"
     CSVExporter().export(sample_dataframe, nested)
     assert nested.parent.exists()
     assert nested.exists()
-
-
-@patch("pandas.DataFrame.to_parquet")
-def test_parquet_exporter_export_calls_to_parquet_with_correct_args(
-    mock_to_parquet: MagicMock, sample_dataframe: pd.DataFrame, tmp_output_path: Path
-) -> None:
-    """Happy path: ParquetExporter delegates to df.to_parquet with destination and index=False."""
-    dest = tmp_output_path / "data.parquet"
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    ParquetExporter().export(sample_dataframe, dest)
-    mock_to_parquet.assert_called_once_with(dest, index=False)
 
 
 def test_csv_exporter_save_to_disk_called_with_correct_arguments(

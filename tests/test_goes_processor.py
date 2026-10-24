@@ -1,4 +1,4 @@
-"""Tests for masters_project.processors.goes: GOES NetCDF metadata, projection, and window extraction."""
+"""Tests for masters_project.processors.goes: dataset opening, projection, and window extraction."""
 
 from unittest.mock import MagicMock, patch
 
@@ -63,28 +63,6 @@ def mock_goes_dataset_behind_earth() -> xr.Dataset:
     return ds
 
 
-@pytest.fixture
-def mock_goes_dataset_with_window() -> xr.Dataset:
-    """Dataset with Rad variable and target indices in attrs for extract_window_to_df."""
-    radius = 1
-    dim = 2 * radius + 1  # 3
-    data = np.arange(dim * dim, dtype=float).reshape(dim, dim)
-    ds = xr.Dataset(
-        {"Rad": (["y", "x"], data)},
-        coords={
-            "y": np.arange(dim, dtype=float),
-            "x": np.arange(dim, dtype=float),
-        },
-        attrs={
-            "target_pixel_i": 1,
-            "target_pixel_j": 1,
-            "channel": "C01",
-            "timestamp": pd.Timestamp("2024-01-01 12:00:00", tz="UTC"),
-        },
-    )
-    return ds
-
-
 # =============================================================================
 # Tests
 # =============================================================================
@@ -101,33 +79,6 @@ def test_open_as_dataset_file_like_object_returns_dataset(
     result = GoesProcessor.open_as_dataset(fake_file)
     mock_open.assert_called_once_with(fake_file, engine="h5netcdf", cache=False)
     assert result is mock_ds
-
-
-@pytest.mark.parametrize(
-    ("dataset_name", "expected_channel"),
-    [
-        (
-            "OR_ABI-L1b-RadM1-C01_G16_s20240011200000_e20240011205999_c20240011205999",
-            "C01",
-        ),
-        ("", "UNK"),
-        ("malformed", "UNK"),
-    ],
-    ids=["valid_abi_filename", "empty_dataset_name", "malformed_dataset_name"],
-)
-def test_add_metadata_various_dataset_names_sets_channel_correctly(
-    dataset_name: str, expected_channel: str
-) -> None:
-    """Parametrized: valid ABI filename, empty, and malformed dataset_name produce correct channel or UNK fallback."""
-    ds = xr.Dataset(
-        attrs={
-            "dataset_name": dataset_name,
-            "time_coverage_start": "2024-01-01T12:00:00Z",
-        }
-    )
-    result = GoesProcessor.add_metadata(ds)
-    assert result.attrs["channel"] == expected_channel
-    assert "timestamp" in result.attrs
 
 
 def test_get_target_indices_valid_coords_returns_integer_indices(
@@ -148,17 +99,6 @@ def test_get_target_indices_point_behind_earth_raises_valueerror(
     # Use coords that trigger the visibility check (opposite side of Earth from -75°)
     with pytest.raises(ValueError, match="hidden behind the Earth"):
         GoesProcessor.get_target_indices(ds, lat=0.0, lon=105.0)
-
-
-def test_extract_window_to_df_missing_target_indices_raises_valueerror() -> None:
-    """Failure mode: missing target_pixel_i or target_pixel_j in attrs must raise ValueError."""
-    ds = xr.Dataset(
-        {"Rad": (["y", "x"], np.zeros((3, 3)))},
-        coords={"y": np.arange(3), "x": np.arange(3)},
-        attrs={"channel": "C01"},  # no target_pixel_i, target_pixel_j
-    )
-    with pytest.raises(ValueError, match="target_pixel_i and target_pixel_j"):
-        GoesProcessor.extract_window_to_df(ds, variable="Rad", radius=1)
 
 
 # =============================================================================

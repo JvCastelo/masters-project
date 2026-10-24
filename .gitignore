@@ -16,5 +16,10 @@ data/
 *.parquet
 models/*.joblib
 
+# Test coverage
+.coverage
+htmlcov/
+coverage.xml
+
 # IDE
 .vscode

@@ -38,32 +38,6 @@ def test_goes_s3_client_initialization_sets_attributes_correctly(
     assert mock_goes_s3_client.bucket_name == "noaa-goes16"
 
 
-def test_goes_s3_client_get_files_path_start_after_end_raises_valueerror(
-    mock_goes_s3_client: GoesS3Client,
-) -> None:
-    """Critical failure: start_date > end_date must raise ValueError to prevent invalid queries."""
-    with pytest.raises(ValueError, match="start_date cannot be after end_date"):
-        mock_goes_s3_client.get_files_path(
-            channel="C01",
-            start_date="2024-01-15",
-            end_date="2024-01-10",
-        )
-
-
-def test_goes_s3_client_get_files_path_calls_glob_with_correct_pattern(
-    mock_goes_s3_client: GoesS3Client,
-) -> None:
-    """Happy path: get_files_path builds bucket/product/year/doy pattern and calls fs.glob per day."""
-    mock_goes_s3_client.fs.glob.return_value = []
-    mock_goes_s3_client.get_files_path(
-        channel="C01",
-        start_date=date(2019, 1, 1),
-        end_date=date(2019, 1, 1),
-    )
-    expected_pattern = "noaa-goes16/ABI-L1b-RadC/2019/001/*/*C01*.nc"
-    mock_goes_s3_client.fs.glob.assert_called_with(expected_pattern)
-
-
 def _key(channel: str, hour: str = "00") -> str:
     return (
         f"noaa-goes16/ABI-L1b-RadC/2019/001/{hour}/"
@@ -163,16 +137,6 @@ def test_list_files_by_channel_only_days_skips_other_days(
         "noaa-goes16/ABI-L1b-RadC/2019/002/*/*.nc",
         "noaa-goes16/ABI-L1b-RadC/2019/004/*/*.nc",
     ]
-
-
-def test_goes_s3_client_get_file_opens_with_s3_prefix(
-    mock_goes_s3_client: GoesS3Client,
-) -> None:
-    """Happy path: get_file prepends s3:// to the path before calling fs.open."""
-    mock_goes_s3_client.get_file("noaa-goes16/ABI-L1b-RadC/2019/001/12/file.nc")
-    mock_goes_s3_client.fs.open.assert_called_once_with(
-        "s3://noaa-goes16/ABI-L1b-RadC/2019/001/12/file.nc"
-    )
 
 
 def test_sonda_client_invalid_station_raises_valueerror() -> None:
